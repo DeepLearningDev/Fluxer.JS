@@ -70,6 +70,26 @@ export class FluxerBot {
       return this;
     }
 
+    const setupResult = this.#applyModule(module);
+    if (module.setup && this.#isPromiseLike(setupResult)) {
+      throw new Error(
+        `Module "${module.name}" has async setup. Use installModule() instead of module().`
+      );
+    }
+
+    return this;
+  }
+
+  public async installModule(module: FluxerModule): Promise<this> {
+    if (this.#modules.has(module.name)) {
+      return this;
+    }
+
+    await Promise.resolve(this.#applyModule(module));
+    return this;
+  }
+
+  #applyModule(module: FluxerModule): Promise<void> | void {
     this.#modules.add(module.name);
 
     for (const command of module.commands ?? []) {
@@ -88,8 +108,7 @@ export class FluxerBot {
       this.hooks(module.hooks);
     }
 
-    void module.setup?.(this);
-    return this;
+    return module.setup?.(this);
   }
 
   public get modules(): string[] {
@@ -265,5 +284,9 @@ export class FluxerBot {
 
   #normalizeCommandKey(name: string): string {
     return this.caseSensitiveCommands ? name : name.toLowerCase();
+  }
+
+  #isPromiseLike(value: unknown): value is Promise<unknown> {
+    return typeof value === "object" && value !== null && "then" in value;
   }
 }

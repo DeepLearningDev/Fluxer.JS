@@ -233,4 +233,5 @@ export interface FluxerBotLike {
   guard(guard: FluxerCommandGuard): this;
   hooks(hooks: FluxerCommandExecutionHooks): this;
   module(module: FluxerModule): this;
+  installModule(module: FluxerModule): Promise<this>;
 }

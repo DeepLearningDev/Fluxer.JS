@@ -85,6 +85,8 @@ client.registerBot(bot);
 await client.connect();
 ```
 
+For synchronous modules, use `bot.module(...)`. If a module needs async setup, use `await bot.installModule(...)` so startup remains deterministic.
+
 Core command behavior is intentionally strict:
 
 - Command keys are case-insensitive by default

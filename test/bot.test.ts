@@ -199,3 +199,36 @@ test("throws on duplicate command aliases", () => {
     });
   }, /already registered/);
 });
+
+test("awaits async module setup through installModule", async () => {
+  const bot = new FluxerBot({
+    name: "TestBot",
+    prefix: "!"
+  });
+
+  const calls: string[] = [];
+
+  await bot.installModule({
+    name: "async-module",
+    setup: async () => {
+      calls.push("setup");
+    }
+  });
+
+  assert.deepEqual(calls, ["setup"]);
+  assert.deepEqual(bot.modules, ["async-module"]);
+});
+
+test("rejects async module setup through module()", () => {
+  const bot = new FluxerBot({
+    name: "TestBot",
+    prefix: "!"
+  });
+
+  assert.throws(() => {
+    bot.module({
+      name: "async-module",
+      setup: async () => {}
+    });
+  }, /Use installModule\(\)/);
+});
