@@ -1,0 +1,33 @@
+{
+  "name": "fluxer-js",
+  "version": "0.1.0",
+  "description": "TypeScript framework for building bots on Fluxer.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/example.ts",
+    "start": "node dist/example.js",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "fluxer",
+    "bot",
+    "framework",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}
