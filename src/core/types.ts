@@ -19,9 +19,48 @@ export interface FluxerMessage {
   createdAt: Date;
 }
 
+export interface MessageBuilderLike {
+  toJSON(): Omit<SendMessagePayload, "channelId">;
+}
+
+export interface FluxerEmbedField {
+  name: string;
+  value: string;
+  inline?: boolean;
+}
+
+export interface FluxerEmbedFooter {
+  text: string;
+  iconUrl?: string;
+}
+
+export interface FluxerEmbedAuthor {
+  name: string;
+  url?: string;
+  iconUrl?: string;
+}
+
+export interface FluxerEmbedImage {
+  url: string;
+}
+
+export interface FluxerEmbed {
+  title?: string;
+  description?: string;
+  url?: string;
+  color?: number;
+  timestamp?: string;
+  footer?: FluxerEmbedFooter;
+  author?: FluxerEmbedAuthor;
+  image?: FluxerEmbedImage;
+  thumbnail?: FluxerEmbedImage;
+  fields?: FluxerEmbedField[];
+}
+
 export interface SendMessagePayload {
   channelId: string;
-  content: string;
+  content?: string;
+  embeds?: FluxerEmbed[];
   nonce?: string;
   messageReference?: FluxerMessageReference;
 }
@@ -46,7 +85,9 @@ export interface CommandContext {
   args: string[];
   commandName: string;
   state: Record<string, unknown>;
-  reply: (content: string) => Promise<void>;
+  reply: (
+    message: string | Omit<SendMessagePayload, "channelId"> | MessageBuilderLike
+  ) => Promise<void>;
 }
 
 export interface ParsedCommandInput {
@@ -222,7 +263,10 @@ export interface FluxerGatewayTransportOptions {
 
 export interface FluxerClientLike {
   isConnected(): boolean;
-  sendMessage(channelId: string, content: string): Promise<void>;
+  sendMessage(
+    channelId: string,
+    message: string | Omit<SendMessagePayload, "channelId"> | MessageBuilderLike
+  ): Promise<void>;
 }
 
 export interface FluxerBotLike {

@@ -48,6 +48,37 @@ export class RestTransport extends BaseTransport {
         },
         body: JSON.stringify({
           content: payload.content,
+          embeds: payload.embeds?.map((embed) => ({
+            ...embed,
+            footer: embed.footer
+              ? {
+                  text: embed.footer.text,
+                  icon_url: embed.footer.iconUrl
+                }
+              : undefined,
+            author: embed.author
+              ? {
+                  name: embed.author.name,
+                  url: embed.author.url,
+                  icon_url: embed.author.iconUrl
+                }
+              : undefined,
+            image: embed.image
+              ? {
+                  url: embed.image.url
+                }
+              : undefined,
+            thumbnail: embed.thumbnail
+              ? {
+                  url: embed.thumbnail.url
+                }
+              : undefined,
+            fields: embed.fields?.map((field) => ({
+              name: field.name,
+              value: field.value,
+              inline: field.inline
+            }))
+          })),
           nonce: payload.nonce,
           message_reference: payload.messageReference
             ? {

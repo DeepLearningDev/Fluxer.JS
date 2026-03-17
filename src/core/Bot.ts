@@ -1,3 +1,4 @@
+import { resolveMessagePayload } from "./builders.js";
 import { parseCommandInput } from "./CommandParser.js";
 import type { FluxerClient } from "./Client.js";
 import type {
@@ -162,8 +163,11 @@ export class FluxerBot {
       args,
       commandName,
       state: {},
-      reply: async (content: string) => {
-        await this.#client?.sendMessage(message.channel.id, content);
+      reply: async (replyMessage) => {
+        await this.#client?.sendMessage(
+          message.channel.id,
+          resolveMessagePayload(replyMessage)
+        );
       }
     };
 

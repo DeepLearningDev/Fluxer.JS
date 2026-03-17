@@ -1,4 +1,9 @@
 export { FluxerBot } from "./core/Bot.js";
+export {
+  EmbedBuilder,
+  MessageBuilder,
+  resolveMessagePayload
+} from "./core/builders.js";
 export { FluxerClient } from "./core/Client.js";
 export {
   parseCommandInput,
@@ -37,6 +42,11 @@ export type {
   FluxerCommand,
   FluxerEventMap,
   FluxerErrorHandler,
+  FluxerEmbed,
+  FluxerEmbedAuthor,
+  FluxerEmbedField,
+  FluxerEmbedFooter,
+  FluxerEmbedImage,
   FluxerGuardDecision,
   FluxerGuardResult,
   FluxerGatewayInfo,

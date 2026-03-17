@@ -1,4 +1,5 @@
 import { FluxerBot } from "./core/Bot.js";
+import { EmbedBuilder, MessageBuilder } from "./core/builders.js";
 import { FluxerClient } from "./core/Client.js";
 import { MockTransport } from "./core/MockTransport.js";
 import { createPermissionGuard } from "./core/Permissions.js";
@@ -45,7 +46,17 @@ const utilityModule: FluxerModule = {
       name: "ping",
       description: "Check whether the bot is alive.",
       execute: async ({ reply, state }) => {
-        await reply("pong");
+        await reply(
+          new MessageBuilder()
+            .setContent("pong")
+            .addEmbed(
+              new EmbedBuilder()
+                .setTitle("Heartbeat")
+                .setDescription("StarterBot is online.")
+                .addField({ name: "Command", value: "ping", inline: true })
+                .setColor(0x2f855a)
+            )
+        );
         state.lastCommand = "ping";
       }
     },

@@ -1,6 +1,13 @@
 import { EventEmitter } from "node:events";
+import { resolveMessagePayload } from "./builders.js";
 import type { FluxerBot } from "./Bot.js";
-import type { FluxerEventMap, FluxerMessage, FluxerTransport } from "./types.js";
+import type {
+  FluxerEventMap,
+  FluxerMessage,
+  FluxerTransport,
+  MessageBuilderLike,
+  SendMessagePayload
+} from "./types.js";
 import { MockTransport } from "./MockTransport.js";
 
 type EventKey = keyof FluxerEventMap;
@@ -41,8 +48,14 @@ export class FluxerClient extends EventEmitter {
     bot.attach(this);
   }
 
-  public async sendMessage(channelId: string, content: string): Promise<void> {
-    await this.#transport.sendMessage({ channelId, content });
+  public async sendMessage(
+    channelId: string,
+    message: string | Omit<SendMessagePayload, "channelId"> | MessageBuilderLike
+  ): Promise<void> {
+    await this.#transport.sendMessage({
+      channelId,
+      ...resolveMessagePayload(message)
+    });
   }
 
   public async receiveMessage(message: FluxerMessage): Promise<void> {

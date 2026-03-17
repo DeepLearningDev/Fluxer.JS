@@ -27,8 +27,10 @@ npm test
 
 ```ts
 import {
+  EmbedBuilder,
   FluxerBot,
   FluxerClient,
+  MessageBuilder,
   createPermissionGuard
 } from "fluxer-js";
 import type { FluxerModule } from "fluxer-js";
@@ -59,7 +61,15 @@ const utilityModule: FluxerModule = {
       name: "ping",
       description: "Replies with pong",
       execute: async ({ reply, state }) => {
-        await reply("pong");
+        await reply(
+          new MessageBuilder()
+            .setContent("pong")
+            .addEmbed(
+              new EmbedBuilder()
+                .setTitle("Heartbeat")
+                .setDescription("Bot is online.")
+            )
+        );
         state.lastCommand = "ping";
       }
     },
@@ -93,6 +103,12 @@ Core command behavior is intentionally strict:
 - Duplicate command names and aliases throw immediately
 - Quoted arguments are parsed as a single argument
 - Empty command invocations are ignored cleanly
+
+Rich messages are now builder-driven:
+
+- `MessageBuilder` composes outbound payloads
+- `EmbedBuilder` handles typed embed construction
+- `client.sendMessage(...)` and `context.reply(...)` accept either strings or rich payloads
 
 ## Project layout
 
@@ -152,6 +168,7 @@ Current state is the SDK foundation layer:
 - Middleware, guard, and hook execution now exist as first-class bot framework features
 - Modules and declarative permission policies now exist as first-class composition tools
 - Build output and command parsing are now deterministic and test-backed
+- Rich message composition is typed and transport-aware
 
 This is still not a production framework. The biggest missing pieces are:
 

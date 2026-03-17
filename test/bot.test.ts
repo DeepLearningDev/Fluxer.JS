@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { FluxerBot } from "../src/core/Bot.js";
+import { EmbedBuilder, MessageBuilder, resolveMessagePayload } from "../src/core/builders.js";
 import { parseCommandInput } from "../src/core/CommandParser.js";
 import { FluxerClient } from "../src/core/Client.js";
 import { MockTransport } from "../src/core/MockTransport.js";
 import { createPermissionGuard } from "../src/core/Permissions.js";
-import type { FluxerCommand, FluxerMessage } from "../src/core/types.js";
+import type { FluxerCommand, FluxerMessage, SendMessagePayload } from "../src/core/types.js";
 
 function createMessage(content: string, overrides: Partial<FluxerMessage> = {}): FluxerMessage {
   return {
@@ -58,10 +59,20 @@ test("runs middleware before executing commands", async () => {
 test("blocks commands when permission guards fail", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
-  const replies: string[] = [];
+  const replies: Array<Omit<SendMessagePayload, "channelId">> = [];
 
-  client.sendMessage = async (_channelId: string, content: string) => {
-    replies.push(content);
+  client.sendMessage = async (_channelId, message) => {
+    if (typeof message === "string") {
+      replies.push({ content: message });
+      return;
+    }
+
+    if ("toJSON" in message && typeof message.toJSON === "function") {
+      replies.push(message.toJSON());
+      return;
+    }
+
+    replies.push(message as Omit<SendMessagePayload, "channelId">);
   };
 
   const bot = new FluxerBot({
@@ -88,7 +99,7 @@ test("blocks commands when permission guards fail", async () => {
   await client.connect();
   await transport.injectMessage(createMessage("!admin"));
 
-  assert.deepEqual(replies, ["No access."]);
+  assert.deepEqual(replies, [{ content: "No access." }]);
 });
 
 test("installs module commands once even if the module is re-used", async () => {
@@ -231,4 +242,31 @@ test("rejects async module setup through module()", () => {
       setup: async () => {}
     });
   }, /Use installModule\(\)/);
+});
+
+test("builds rich message payloads with embeds", () => {
+  const payload = new MessageBuilder()
+    .setContent("hello")
+    .addEmbed(
+      new EmbedBuilder()
+        .setTitle("Status")
+        .setDescription("All systems operational")
+        .addField({ name: "Latency", value: "42ms", inline: true })
+    )
+    .toJSON();
+
+  assert.equal(payload.content, "hello");
+  assert.equal(payload.embeds?.[0]?.title, "Status");
+  assert.equal(payload.embeds?.[0]?.fields?.[0]?.value, "42ms");
+});
+
+test("normalizes string and builder message payloads", () => {
+  const fromString = resolveMessagePayload("pong");
+  const fromBuilder = resolveMessagePayload(
+    new MessageBuilder().setContent("pong").addEmbed(new EmbedBuilder().setTitle("Info"))
+  );
+
+  assert.deepEqual(fromString, { content: "pong" });
+  assert.equal(fromBuilder.content, "pong");
+  assert.equal(fromBuilder.embeds?.[0]?.title, "Info");
 });
