@@ -24,6 +24,7 @@ export type {
   FluxerClientLike,
   FluxerCommand,
   FluxerEventMap,
+  FluxerErrorHandler,
   FluxerGatewayInfo,
   FluxerGatewayTransportOptions,
   FluxerInstanceDiscoveryDocument,

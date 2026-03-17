@@ -66,6 +66,13 @@ The current implementation follows the official Fluxer docs:
 - Message send: `POST /v1/channels/{channel_id}/messages`
 - Bot auth header: `Authorization: Bot <token>`
 
+The gateway session layer currently assumes Discord-style gateway lifecycle semantics as an inference from Fluxer's quickstart guidance that the gateway is Discord-compatible. The official lifecycle page is still `TBD`, so the SDK treats these parts as adapter-safe defaults rather than a final protocol guarantee:
+
+- `HELLO` starts the heartbeat loop
+- `HEARTBEAT_ACK` clears the pending heartbeat state
+- `RECONNECT` and invalid session payloads trigger reconnect
+- `IDENTIFY` can be generated automatically from the bot token
+
 ```ts
 import {
   FluxerBot,
@@ -77,6 +84,7 @@ import {
 const transport = await createFluxerPlatformTransport({
   instanceUrl: "https://api.fluxer.app",
   auth: { token: process.env.FLUXER_TOKEN ?? "" },
+  intents: 513,
   parseMessageEvent: defaultParseMessageEvent
 });
 

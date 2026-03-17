@@ -68,12 +68,14 @@ export interface FluxerEventMap {
 }
 
 export type FluxerMessageHandler = (message: FluxerMessage) => Promise<void> | void;
+export type FluxerErrorHandler = (error: Error) => Promise<void> | void;
 
 export interface FluxerTransport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   sendMessage(payload: SendMessagePayload): Promise<void>;
   onMessage(handler: FluxerMessageHandler): void;
+  onError(handler: FluxerErrorHandler): void;
 }
 
 export interface FluxerReconnectOptions {
@@ -135,6 +137,14 @@ export interface FluxerGatewayTransportOptions {
   fetchImpl?: typeof fetch;
   webSocketFactory?: (url: string, protocols?: string | string[]) => WebSocket;
   identifyPayload?: unknown;
+  buildIdentifyPayload?: (context: { auth?: FluxerAuth }) => unknown;
+  heartbeatIntervalResolver?: (payload: unknown) => number | null;
+  isDispatchPayload?: (payload: unknown) => boolean;
+  isHeartbeatAckPayload?: (payload: unknown) => boolean;
+  isReconnectPayload?: (payload: unknown) => boolean;
+  isInvalidSessionPayload?: (payload: unknown) => boolean;
+  isHelloPayload?: (payload: unknown) => boolean;
+  createHeartbeatPayload?: (sequence: number | null) => unknown;
   reconnect?: FluxerReconnectOptions;
   parseMessageEvent: (payload: unknown) => FluxerMessage | null;
 }

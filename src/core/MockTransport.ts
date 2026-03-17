@@ -19,7 +19,9 @@ export class MockTransport extends BaseTransport {
 
   public async injectMessage(message: FluxerMessage): Promise<void> {
     if (!this.#connected) {
-      throw new Error("MockTransport is not connected.");
+      const error = new Error("MockTransport is not connected.");
+      await this.emitError(error);
+      throw error;
     }
 
     await this.emitMessage(message);

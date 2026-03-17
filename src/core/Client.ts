@@ -16,6 +16,9 @@ export class FluxerClient extends EventEmitter {
     this.#transport.onMessage(async (message) => {
       await this.receiveMessage(message);
     });
+    this.#transport.onError(async (error) => {
+      this.emit("error", error);
+    });
   }
 
   public async connect(): Promise<void> {

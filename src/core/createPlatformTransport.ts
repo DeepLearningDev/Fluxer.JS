@@ -16,6 +16,10 @@ export interface CreateFluxerPlatformTransportOptions {
   userAgent?: string;
   protocols?: string | string[];
   identifyPayload?: unknown;
+  intents?: number;
+  shard?: [number, number];
+  properties?: Record<string, string>;
+  presence?: Record<string, unknown>;
   webSocketFactory?: (url: string, protocols?: string | string[]) => WebSocket;
   parseMessageEvent: FluxerGatewayTransportOptions["parseMessageEvent"];
 }
@@ -43,6 +47,30 @@ export async function createFluxerPlatformTransport(
       fetchImpl: options.fetchImpl,
       protocols: options.protocols,
       identifyPayload: options.identifyPayload,
+      buildIdentifyPayload: ({ auth }) => {
+        if (options.identifyPayload !== undefined) {
+          return options.identifyPayload;
+        }
+
+        if (!auth) {
+          return undefined;
+        }
+
+        return {
+          op: 2,
+          d: {
+            token: auth.token,
+            intents: options.intents ?? 0,
+            properties: options.properties ?? {
+              os: process.platform,
+              browser: "fluxer-js",
+              device: "fluxer-js"
+            },
+            presence: options.presence,
+            shard: options.shard
+          }
+        };
+      },
       webSocketFactory: options.webSocketFactory,
       parseMessageEvent: options.parseMessageEvent
     }),

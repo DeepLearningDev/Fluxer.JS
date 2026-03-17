@@ -21,6 +21,12 @@ export class PlatformTransport extends BaseTransport {
     this.#inbound.onMessage(handler);
   }
 
+  public override onError(handler: (error: Error) => Promise<void> | void): void {
+    super.onError(handler);
+    this.#inbound.onError(handler);
+    this.#outbound.onError(handler);
+  }
+
   public async connect(): Promise<void> {
     await Promise.all([this.#inbound.connect(), this.#outbound.connect()]);
   }
