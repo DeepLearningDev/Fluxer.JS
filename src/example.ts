@@ -1,6 +1,8 @@
 import { FluxerBot } from "./core/Bot.js";
 import { FluxerClient } from "./core/Client.js";
 import { MockTransport } from "./core/MockTransport.js";
+import { createPermissionGuard } from "./core/Permissions.js";
+import type { FluxerModule } from "./core/types.js";
 
 const transport = new MockTransport();
 const client = new FluxerClient(transport);
@@ -36,32 +38,51 @@ bot.use(async (context, next) => {
   console.log(`Command "${context.commandName}" finished in ${context.state.durationMs}ms`);
 });
 
-bot.command({
-  name: "ping",
-  description: "Check whether the bot is alive.",
-  execute: async ({ reply, state }) => {
-    await reply("pong");
-    state.lastCommand = "ping";
-  }
-});
-
-bot.command({
-  name: "echo",
-  description: "Echo back the provided message.",
-  guards: [
-    ({ args }) => {
-      if (args.length === 0) {
-        return "Provide text to echo.";
+const utilityModule: FluxerModule = {
+  name: "utility",
+  commands: [
+    {
+      name: "ping",
+      description: "Check whether the bot is alive.",
+      execute: async ({ reply, state }) => {
+        await reply("pong");
+        state.lastCommand = "ping";
       }
+    },
+    {
+      name: "echo",
+      description: "Echo back the provided message.",
+      guards: [
+        ({ args }) => {
+          if (args.length === 0) {
+            return "Provide text to echo.";
+          }
 
-      return true;
+          return true;
+        }
+      ],
+      execute: async ({ args, reply }) => {
+        await reply(args.join(" ").trim());
+      }
+    },
+    {
+      name: "admin",
+      description: "Restricted command for bot operators.",
+      guards: [
+        createPermissionGuard({
+          allowUserIds: ["user_1"],
+          allowChannelTypes: ["text"],
+          reason: "This command is restricted to approved operators in server text channels."
+        })
+      ],
+      execute: async ({ reply }) => {
+        await reply("Admin command granted.");
+      }
     }
-  ],
-  execute: async ({ args, reply }) => {
-    const content = args.join(" ").trim();
-    await reply(content);
-  }
-});
+  ]
+};
+
+bot.module(utilityModule);
 
 client.on("ready", ({ connectedAt }) => {
   console.log(`Connected at ${connectedAt.toISOString()}`);
@@ -103,6 +124,21 @@ await transport.injectMessage({
 await transport.injectMessage({
   id: "msg_2",
   content: "!echo Fluxer bot framework online",
+  author: {
+    id: "user_1",
+    username: "kaleb"
+  },
+  channel: {
+    id: "general",
+    name: "general",
+    type: "text"
+  },
+  createdAt: new Date()
+});
+
+await transport.injectMessage({
+  id: "msg_4",
+  content: "!admin",
   author: {
     id: "user_1",
     username: "kaleb"

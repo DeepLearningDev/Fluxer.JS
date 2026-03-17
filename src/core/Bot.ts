@@ -4,6 +4,7 @@ import type {
   FluxerCommandExecutionHooks,
   FluxerCommandGuard,
   FluxerCommandMiddleware,
+  FluxerModule,
   FluxerBotOptions,
   FluxerCommand,
   FluxerMessage
@@ -18,7 +19,8 @@ export class FluxerBot {
   #commands = new Map<string, FluxerCommand>();
   #guards: FluxerCommandGuard[] = [];
   #middleware: FluxerCommandMiddleware[] = [];
-  #hooks: FluxerCommandExecutionHooks = {};
+  #hookSets: FluxerCommandExecutionHooks[] = [];
+  #modules = new Set<string>();
 
   public constructor(options: FluxerBotOptions) {
     this.name = options.name;
@@ -26,7 +28,9 @@ export class FluxerBot {
     this.ignoreBots = options.ignoreBots ?? true;
     this.#guards = [...(options.guards ?? [])];
     this.#middleware = [...(options.middleware ?? [])];
-    this.#hooks = { ...(options.hooks ?? {}) };
+    if (options.hooks) {
+      this.#hookSets.push(options.hooks);
+    }
   }
 
   public attach(client: FluxerClient): void {
@@ -54,12 +58,39 @@ export class FluxerBot {
   }
 
   public hooks(hooks: FluxerCommandExecutionHooks): this {
-    this.#hooks = {
-      ...this.#hooks,
-      ...hooks
-    };
-
+    this.#hookSets.push(hooks);
     return this;
+  }
+
+  public module(module: FluxerModule): this {
+    if (this.#modules.has(module.name)) {
+      return this;
+    }
+
+    this.#modules.add(module.name);
+
+    for (const command of module.commands ?? []) {
+      this.command(command);
+    }
+
+    for (const guard of module.guards ?? []) {
+      this.guard(guard);
+    }
+
+    for (const middleware of module.middleware ?? []) {
+      this.use(middleware);
+    }
+
+    if (module.hooks) {
+      this.hooks(module.hooks);
+    }
+
+    void module.setup?.(this);
+    return this;
+  }
+
+  public get modules(): string[] {
+    return [...this.#modules];
   }
 
   public get commands(): FluxerCommand[] {
@@ -86,7 +117,7 @@ export class FluxerBot {
 
     const command = this.#commands.get(commandName);
     if (!command) {
-      await this.#hooks.commandNotFound?.({
+      await this.#runHook("commandNotFound", {
         client: this.#client,
         bot: this,
         message,
@@ -111,7 +142,7 @@ export class FluxerBot {
 
     const blockedResult = await this.#runGuards(context, command);
     if (blockedResult) {
-      await this.#hooks.commandBlocked?.({
+      await this.#runHook("commandBlocked", {
         command,
         commandContext: context,
         result: blockedResult
@@ -125,13 +156,13 @@ export class FluxerBot {
     }
 
     try {
-      await this.#hooks.beforeCommand?.(context);
+      await this.#runHook("beforeCommand", context);
       await this.#runMiddleware(context, command);
-      await this.#hooks.afterCommand?.(context);
+      await this.#runHook("afterCommand", context);
       this.#client.emit("commandExecuted", { commandName, message });
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error("Command execution failed.");
-      await this.#hooks.commandError?.({
+      await this.#runHook("commandError", {
         command,
         commandContext: context,
         error: normalizedError
@@ -197,5 +228,17 @@ export class FluxerBot {
     }
 
     return result;
+  }
+
+  async #runHook<K extends keyof FluxerCommandExecutionHooks>(
+    hookName: K,
+    payload: Parameters<NonNullable<FluxerCommandExecutionHooks[K]>>[0]
+  ): Promise<void> {
+    for (const hooks of this.#hookSets) {
+      const hook = hooks[hookName];
+      if (hook) {
+        await hook(payload as never);
+      }
+    }
   }
 }

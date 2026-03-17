@@ -24,7 +24,12 @@ npm run dev
 ## Example
 
 ```ts
-import { FluxerBot, FluxerClient } from "fluxer-js";
+import {
+  FluxerBot,
+  FluxerClient,
+  createPermissionGuard
+} from "fluxer-js";
+import type { FluxerModule } from "fluxer-js";
 
 const client = new FluxerClient();
 const bot = new FluxerBot({
@@ -45,14 +50,34 @@ bot.use(async (context, next) => {
   context.state.durationMs = Date.now() - startedAt;
 });
 
-bot.command({
-  name: "ping",
-  description: "Replies with pong",
-  execute: async ({ reply, state }) => {
-    await reply("pong");
-    state.lastCommand = "ping";
-  }
-});
+const utilityModule: FluxerModule = {
+  name: "utility",
+  commands: [
+    {
+      name: "ping",
+      description: "Replies with pong",
+      execute: async ({ reply, state }) => {
+        await reply("pong");
+        state.lastCommand = "ping";
+      }
+    },
+    {
+      name: "admin",
+      guards: [
+        createPermissionGuard({
+          allowUserIds: ["123"],
+          allowChannelTypes: ["text"],
+          reason: "Only operators can use this command."
+        })
+      ],
+      execute: async ({ reply }) => {
+        await reply("Admin access granted.");
+      }
+    }
+  ]
+};
+
+bot.module(utilityModule);
 
 client.registerBot(bot);
 await client.connect();
@@ -114,12 +139,13 @@ Current state is the SDK foundation layer:
 - The client is now transport-driven instead of hard-coded to console output
 - `MockTransport` supports local development while the real Fluxer transport is built
 - Middleware, guard, and hook execution now exist as first-class bot framework features
+- Modules and declarative permission policies now exist as first-class composition tools
 
 This is still not a production framework. The biggest missing pieces are:
 
 - Full gateway event opcode and payload coverage
 - Rich message payload builders for embeds and attachments
-- Permissions, modules/plugins, and richer command routing
+- Plugin packaging, richer permissions, and more advanced command routing
 - Testing, packaging, and versioned API guarantees
 
 ## Next steps

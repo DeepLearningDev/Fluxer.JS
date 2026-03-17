@@ -105,6 +105,26 @@ export interface FluxerBotOptions {
   hooks?: FluxerCommandExecutionHooks;
 }
 
+export interface FluxerModule {
+  name: string;
+  commands?: FluxerCommand[];
+  guards?: FluxerCommandGuard[];
+  middleware?: FluxerCommandMiddleware[];
+  hooks?: FluxerCommandExecutionHooks;
+  setup?: (bot: FluxerBotLike) => Promise<void> | void;
+}
+
+export interface FluxerPermissionPolicy {
+  allowUserIds?: string[];
+  denyUserIds?: string[];
+  allowChannelIds?: string[];
+  denyChannelIds?: string[];
+  allowChannelTypes?: FluxerChannel["type"][];
+  denyChannelTypes?: FluxerChannel["type"][];
+  predicate?: (context: CommandContext) => Promise<boolean> | boolean;
+  reason?: string;
+}
+
 export interface FluxerEventMap {
   ready: { connectedAt: Date };
   messageCreate: FluxerMessage;
@@ -202,4 +222,9 @@ export interface FluxerClientLike {
 export interface FluxerBotLike {
   readonly name: string;
   readonly prefix: string;
+  command(command: FluxerCommand): this;
+  use(middleware: FluxerCommandMiddleware): this;
+  guard(guard: FluxerCommandGuard): this;
+  hooks(hooks: FluxerCommandExecutionHooks): this;
+  module(module: FluxerModule): this;
 }

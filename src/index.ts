@@ -9,6 +9,10 @@ export {
 export { GatewayTransport } from "./core/GatewayTransport.js";
 export { MockTransport } from "./core/MockTransport.js";
 export { PlatformTransport } from "./core/PlatformTransport.js";
+export {
+  createPermissionGuard,
+  evaluatePermissionPolicy
+} from "./core/Permissions.js";
 export { RestTransport } from "./core/RestTransport.js";
 export { BaseTransport } from "./core/Transport.js";
 export {
@@ -34,9 +38,11 @@ export type {
   FluxerGatewayInfo,
   FluxerGatewayTransportOptions,
   FluxerInstanceDiscoveryDocument,
+  FluxerModule,
   FluxerMessageReference,
   FluxerMessageHandler,
   FluxerMessage,
+  FluxerPermissionPolicy,
   FluxerReconnectOptions,
   FluxerRestTransportOptions,
   FluxerTransport,
