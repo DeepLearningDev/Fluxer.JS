@@ -19,6 +19,7 @@ This bootstrap gives you a clean starting point for a bot SDK:
 ```bash
 npm install
 npm run dev
+npm test
 ```
 
 ## Example
@@ -146,7 +147,7 @@ This is still not a production framework. The biggest missing pieces are:
 - Full gateway event opcode and payload coverage
 - Rich message payload builders for embeds and attachments
 - Plugin packaging, richer permissions, and more advanced command routing
-- Testing, packaging, and versioned API guarantees
+- Packaging and versioned API guarantees
 
 ## Next steps
 

@@ -96,7 +96,7 @@ await transport.injectMessage({
   content: "!ping",
   author: {
     id: "user_1",
-    username: "kaleb"
+    username: "fluxguy"
   },
   channel: {
     id: "general",
@@ -111,7 +111,7 @@ await transport.injectMessage({
   content: "!missing",
   author: {
     id: "user_1",
-    username: "kaleb"
+    username: "fluxguy"
   },
   channel: {
     id: "general",
@@ -126,7 +126,7 @@ await transport.injectMessage({
   content: "!echo Fluxer bot framework online",
   author: {
     id: "user_1",
-    username: "kaleb"
+    username: "fluxguy"
   },
   channel: {
     id: "general",
@@ -141,7 +141,7 @@ await transport.injectMessage({
   content: "!admin",
   author: {
     id: "user_1",
-    username: "kaleb"
+    username: "fluxguy"
   },
   channel: {
     id: "general",

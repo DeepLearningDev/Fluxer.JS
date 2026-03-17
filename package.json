@@ -12,7 +12,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/example.ts",
     "start": "node dist/example.js",
-    "check": "tsc --noEmit -p tsconfig.json"
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test dist/test/bot.test.js"
   },
   "keywords": [
     "fluxer",
