@@ -40,6 +40,15 @@ export class FluxerClient extends EventEmitter {
     this.#transport.onGatewayDispatch(async (event) => {
       await this.receiveGatewayDispatch(event);
     });
+    this.#transport.onGatewayStateChange(async (event) => {
+      this.emit("gatewayStateChange", event);
+    });
+    this.#transport.onGatewaySessionUpdate(async (session) => {
+      this.emit("gatewaySessionUpdate", session);
+    });
+    this.#transport.onDebug(async (event) => {
+      this.emit("debug", event);
+    });
   }
 
   public async connect(): Promise<void> {

@@ -5,6 +5,8 @@ import { EmbedBuilder, MessageBuilder, resolveMessagePayload } from "../src/core
 import { parseCommandInput } from "../src/core/CommandParser.js";
 import { FluxerClient } from "../src/core/Client.js";
 import { defaultParseDispatchEvent } from "../src/core/createPlatformTransport.js";
+import { GatewayProtocolError, GatewayTransportError } from "../src/core/errors.js";
+import { GatewayTransport } from "../src/core/GatewayTransport.js";
 import { MockTransport } from "../src/core/MockTransport.js";
 import { createPermissionGuard } from "../src/core/Permissions.js";
 import { createEssentialsPlugin } from "../src/plugins/essentials.js";
@@ -26,6 +28,51 @@ function createMessage(content: string, overrides: Partial<FluxerMessage> = {}):
     createdAt: new Date(),
     ...overrides
   };
+}
+
+class FakeWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+
+  public readyState = FakeWebSocket.CONNECTING;
+  public readonly sent: string[] = [];
+  readonly #listeners = new Map<string, Array<(event?: { data?: unknown }) => void>>();
+
+  public addEventListener(type: string, listener: (event?: { data?: unknown }) => void): void {
+    const listeners = this.#listeners.get(type) ?? [];
+    listeners.push(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  public send(data: string): void {
+    this.sent.push(data);
+  }
+
+  public close(): void {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.#emit("close");
+  }
+
+  public emitOpen(): void {
+    this.readyState = FakeWebSocket.OPEN;
+    this.#emit("open");
+  }
+
+  public emitMessage(data: unknown): void {
+    this.#emit("message", { data: JSON.stringify(data) });
+  }
+
+  public emitError(): void {
+    this.#emit("error");
+  }
+
+  #emit(type: string, event?: { data?: unknown }): void {
+    for (const listener of this.#listeners.get(type) ?? []) {
+      listener(event);
+    }
+  }
 }
 
 test("runs middleware before executing commands", async () => {
@@ -624,4 +671,143 @@ test("maps role, reaction, and voice gateway events", async () => {
     "voice-state:user_1:voice_1",
     "voice-server:guild_1:voice.fluxer.app"
   ]);
+});
+
+test("tracks gateway state and resumes sessions on reconnect", async () => {
+  const sockets: FakeWebSocket[] = [];
+  const states: string[] = [];
+  const sessions: Array<{ sessionId?: string; sequence: number | null; resumable: boolean }> = [];
+  const debugEvents: string[] = [];
+
+  const transport = new GatewayTransport({
+    url: "wss://gateway.fluxer.test",
+    auth: { token: "bot-token" },
+    reconnect: {
+      baseDelayMs: 0,
+      maxDelayMs: 0
+    },
+    webSocketFactory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    buildIdentifyPayload: ({ auth }) => ({
+      op: 2,
+      d: { token: auth?.token }
+    }),
+    parseMessageEvent: () => null
+  });
+
+  transport.onGatewayStateChange(({ state }) => {
+    states.push(state);
+  });
+
+  transport.onGatewaySessionUpdate((session) => {
+    sessions.push(session);
+  });
+
+  transport.onDebug((event) => {
+    debugEvents.push(event.event);
+  });
+
+  const connectPromise = transport.connect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const firstSocket = sockets[0];
+  firstSocket.emitOpen();
+  await connectPromise;
+
+  firstSocket.emitMessage({
+    op: 10,
+    d: {
+      heartbeat_interval: 1000
+    }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(JSON.parse(firstSocket.sent[0]).op, 2);
+
+  firstSocket.emitMessage({
+    op: 0,
+    t: "READY",
+    s: 1,
+    d: {
+      session_id: "session_1"
+    }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  firstSocket.close();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const secondSocket = sockets[1];
+  secondSocket.emitOpen();
+  secondSocket.emitMessage({
+    op: 10,
+    d: {
+      heartbeat_interval: 1000
+    }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(JSON.parse(secondSocket.sent[0]).op, 6);
+
+  secondSocket.emitMessage({
+    op: 0,
+    t: "RESUMED",
+    s: 2,
+    d: {}
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(states[0], "connecting");
+  assert.ok(states.includes("identifying"));
+  assert.ok(states.includes("reconnecting"));
+  assert.ok(states.includes("resuming"));
+  assert.equal(states.at(-1), "ready");
+  assert.equal(sessions.at(-1)?.sessionId, "session_1");
+  assert.equal(sessions.at(-1)?.sequence, 2);
+  assert.equal(sessions.at(-1)?.resumable, true);
+  assert.ok(debugEvents.includes("resume_sent"));
+});
+
+test("emits typed protocol errors for invalid sessions", async () => {
+  const sockets: FakeWebSocket[] = [];
+  const errors: Error[] = [];
+
+  const transport = new GatewayTransport({
+    url: "wss://gateway.fluxer.test",
+    auth: { token: "bot-token" },
+    webSocketFactory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    parseMessageEvent: () => null
+  });
+
+  transport.onError((error) => {
+    errors.push(error);
+  });
+
+  const connectPromise = transport.connect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = sockets[0];
+  socket.emitOpen();
+  await connectPromise;
+
+  socket.emitMessage({
+    op: 10,
+    d: {
+      heartbeat_interval: 1000
+    }
+  });
+
+  socket.emitMessage({
+    op: 9,
+    d: false
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.ok(errors.some((error) => error instanceof GatewayProtocolError));
+  assert.ok(errors.some((error) => error instanceof GatewayTransportError));
 });

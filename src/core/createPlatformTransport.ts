@@ -4,6 +4,7 @@ import { PlatformTransport } from "./PlatformTransport.js";
 import { RestTransport } from "./RestTransport.js";
 import type {
   FluxerAuth,
+  FluxerDebugHandler,
   FluxerGatewayDispatchEvent,
   FluxerGatewayEnvelope,
   FluxerGatewayTransportOptions,
@@ -18,6 +19,7 @@ export interface CreateFluxerPlatformTransportOptions {
   userAgent?: string;
   protocols?: string | string[];
   identifyPayload?: unknown;
+  debug?: FluxerDebugHandler;
   intents?: number;
   shard?: [number, number];
   properties?: Record<string, string>;
@@ -48,6 +50,7 @@ export async function createFluxerPlatformTransport(
       auth: options.auth,
       fetchImpl: options.fetchImpl,
       protocols: options.protocols,
+      debug: options.debug,
       identifyPayload: options.identifyPayload,
       buildIdentifyPayload: ({ auth }) => {
         if (options.identifyPayload !== undefined) {

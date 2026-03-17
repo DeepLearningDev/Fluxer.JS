@@ -15,6 +15,11 @@ export {
   fetchInstanceDiscoveryDocument,
   resolveDiscoveryUrl
 } from "./core/Discovery.js";
+export {
+  FluxerError,
+  GatewayProtocolError,
+  GatewayTransportError
+} from "./core/errors.js";
 export { GatewayTransport } from "./core/GatewayTransport.js";
 export { MockTransport } from "./core/MockTransport.js";
 export { PlatformTransport } from "./core/PlatformTransport.js";
@@ -42,6 +47,8 @@ export type {
   FluxerChannel,
   FluxerClientLike,
   FluxerCommand,
+  FluxerDebugEvent,
+  FluxerDebugHandler,
   FluxerEventMap,
   FluxerErrorHandler,
   FluxerEmbed,
@@ -51,9 +58,14 @@ export type {
   FluxerEmbedImage,
   FluxerGuardDecision,
   FluxerGuardResult,
+  FluxerGatewayConnectionState,
   FluxerGatewayDispatchEvent,
   FluxerGatewayEnvelope,
   FluxerGatewayInfo,
+  FluxerGatewaySession,
+  FluxerGatewaySessionHandler,
+  FluxerGatewayStateChangeEvent,
+  FluxerGatewayStateHandler,
   FluxerGatewayTransportOptions,
   FluxerGuild,
   FluxerInstanceDiscoveryDocument,

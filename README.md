@@ -179,6 +179,7 @@ Current state is the SDK foundation layer:
 - Rich message composition is typed and transport-aware
 - Gateway dispatches and higher-level plugins now have first-class entry points
 - Gateway normalization now covers members, presence, typing, roles, reactions, voice, channels, guilds, and messages
+- Gateway runtime now exposes state/session transitions, typed protocol errors, and structured debug hooks
 
 This is still not a production framework. The biggest missing pieces are:
 

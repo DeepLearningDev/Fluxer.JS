@@ -247,6 +247,8 @@ export interface FluxerPermissionPolicy {
 
 export interface FluxerEventMap {
   ready: { connectedAt: Date };
+  gatewayStateChange: FluxerGatewayStateChangeEvent;
+  gatewaySessionUpdate: FluxerGatewaySession;
   messageCreate: FluxerMessage;
   messageUpdate: FluxerMessage;
   messageDelete: { id: string; channelId: string; guildId?: string };
@@ -270,6 +272,7 @@ export interface FluxerEventMap {
   voiceStateUpdate: FluxerVoiceState;
   voiceServerUpdate: FluxerVoiceServerUpdate;
   gatewayDispatch: FluxerGatewayDispatchEvent;
+  debug: FluxerDebugEvent;
   commandExecuted: { commandName: string; message: FluxerMessage };
   error: Error;
 }
@@ -279,6 +282,13 @@ export type FluxerErrorHandler = (error: Error) => Promise<void> | void;
 export type FluxerGatewayDispatchHandler = (
   event: FluxerGatewayDispatchEvent
 ) => Promise<void> | void;
+export type FluxerGatewayStateHandler = (
+  event: FluxerGatewayStateChangeEvent
+) => Promise<void> | void;
+export type FluxerGatewaySessionHandler = (
+  session: FluxerGatewaySession
+) => Promise<void> | void;
+export type FluxerDebugHandler = (event: FluxerDebugEvent) => Promise<void> | void;
 
 export interface FluxerTransport {
   connect(): Promise<void>;
@@ -287,6 +297,9 @@ export interface FluxerTransport {
   onMessage(handler: FluxerMessageHandler): void;
   onError(handler: FluxerErrorHandler): void;
   onGatewayDispatch(handler: FluxerGatewayDispatchHandler): void;
+  onGatewayStateChange(handler: FluxerGatewayStateHandler): void;
+  onGatewaySessionUpdate(handler: FluxerGatewaySessionHandler): void;
+  onDebug(handler: FluxerDebugHandler): void;
 }
 
 export interface FluxerReconnectOptions {
@@ -294,6 +307,35 @@ export interface FluxerReconnectOptions {
   maxAttempts?: number;
   baseDelayMs?: number;
   maxDelayMs?: number;
+}
+
+export type FluxerGatewayConnectionState =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "identifying"
+  | "resuming"
+  | "ready"
+  | "reconnecting"
+  | "disconnected";
+
+export interface FluxerGatewayStateChangeEvent {
+  previousState: FluxerGatewayConnectionState;
+  state: FluxerGatewayConnectionState;
+  reason?: string;
+}
+
+export interface FluxerGatewaySession {
+  sessionId?: string;
+  sequence: number | null;
+  resumable: boolean;
+}
+
+export interface FluxerDebugEvent {
+  scope: "gateway" | "transport" | "client" | "command";
+  event: string;
+  timestamp: string;
+  data?: Record<string, unknown>;
 }
 
 export interface FluxerGatewayInfo {
@@ -347,8 +389,14 @@ export interface FluxerGatewayTransportOptions {
   protocols?: string | string[];
   fetchImpl?: typeof fetch;
   webSocketFactory?: (url: string, protocols?: string | string[]) => WebSocket;
+  debug?: FluxerDebugHandler;
   identifyPayload?: unknown;
   buildIdentifyPayload?: (context: { auth?: FluxerAuth }) => unknown;
+  buildResumePayload?: (context: {
+    auth?: FluxerAuth;
+    sessionId?: string;
+    sequence: number | null;
+  }) => unknown;
   heartbeatIntervalResolver?: (payload: unknown) => number | null;
   isDispatchPayload?: (payload: unknown) => boolean;
   isHeartbeatAckPayload?: (payload: unknown) => boolean;

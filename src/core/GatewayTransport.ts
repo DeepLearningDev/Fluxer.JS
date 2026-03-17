@@ -1,6 +1,11 @@
+import { GatewayProtocolError, GatewayTransportError } from "./errors.js";
 import { fetchGatewayInformation } from "./Discovery.js";
 import { BaseTransport } from "./Transport.js";
 import type {
+  FluxerDebugEvent,
+  FluxerGatewayConnectionState,
+  FluxerGatewayDispatchEvent,
+  FluxerGatewaySession,
   FluxerGatewayTransportOptions,
   FluxerReconnectOptions,
   SendMessagePayload
@@ -25,6 +30,11 @@ export class GatewayTransport extends BaseTransport {
   readonly #options: FluxerGatewayTransportOptions;
   readonly #reconnect: Required<FluxerReconnectOptions>;
   readonly #fetchImpl: typeof fetch;
+  #state: FluxerGatewayConnectionState = "idle";
+  #session: FluxerGatewaySession = {
+    sequence: null,
+    resumable: false
+  };
   #socket?: WebSocket;
   #manualClose = false;
   #reconnectAttempts = 0;
@@ -41,10 +51,14 @@ export class GatewayTransport extends BaseTransport {
       ...DEFAULT_RECONNECT,
       ...options.reconnect
     };
+    if (options.debug) {
+      this.onDebug(options.debug);
+    }
   }
 
   public async connect(): Promise<void> {
     this.#manualClose = false;
+    await this.#setState("connecting");
     await this.#openSocket();
   }
 
@@ -59,10 +73,16 @@ export class GatewayTransport extends BaseTransport {
     this.#stopHeartbeat();
     this.#socket?.close();
     this.#socket = undefined;
+    await this.#setState("disconnected", "manual_disconnect");
   }
 
   public async sendMessage(_payload: SendMessagePayload): Promise<void> {
-    throw new Error("GatewayTransport cannot send messages directly. Pair it with RestTransport.");
+    throw new GatewayTransportError({
+      message: "GatewayTransport cannot send messages directly. Pair it with RestTransport.",
+      code: "GATEWAY_SEND_UNSUPPORTED",
+      state: this.#state,
+      retryable: false
+    });
   }
 
   async #openSocket(): Promise<void> {
@@ -80,6 +100,10 @@ export class GatewayTransport extends BaseTransport {
       socket.addEventListener("open", () => {
         settled = true;
         this.#reconnectAttempts = 0;
+        void this.#setState("connected");
+        void this.#emitDebugEvent("socket_open", {
+          reconnectAttempts: this.#reconnectAttempts
+        });
 
         resolve();
       });
@@ -94,9 +118,23 @@ export class GatewayTransport extends BaseTransport {
       });
 
       socket.addEventListener("error", async () => {
-        await this.emitError(new Error("GatewayTransport socket error."));
+        await this.emitError(
+          new GatewayTransportError({
+            message: "GatewayTransport socket error.",
+            code: "GATEWAY_SOCKET_ERROR",
+            state: this.#state,
+            retryable: true
+          })
+        );
         if (!settled) {
-          reject(new Error("GatewayTransport failed to connect."));
+          reject(
+            new GatewayTransportError({
+              message: "GatewayTransport failed to connect.",
+              code: "GATEWAY_CONNECT_FAILED",
+              state: this.#state,
+              retryable: true
+            })
+          );
         }
       });
 
@@ -104,13 +142,30 @@ export class GatewayTransport extends BaseTransport {
         this.#socket = undefined;
         this.#stopHeartbeat();
         if (!settled) {
-          reject(new Error("GatewayTransport closed before the connection was established."));
+          reject(
+            new GatewayTransportError({
+              message: "GatewayTransport closed before the connection was established.",
+              code: "GATEWAY_CLOSED_PREMATURELY",
+              state: this.#state,
+              retryable: true
+            })
+          );
           return;
         }
 
         if (!this.#manualClose) {
-          await this.emitError(new Error("GatewayTransport disconnected unexpectedly."));
+          await this.emitError(
+            new GatewayTransportError({
+              message: "GatewayTransport disconnected unexpectedly.",
+              code: "GATEWAY_DISCONNECTED",
+              state: this.#state,
+              retryable: true
+            })
+          );
+          await this.#setState("reconnecting", "socket_close");
           this.#scheduleReconnect();
+        } else {
+          await this.#setState("disconnected", "socket_close");
         }
       });
     });
@@ -131,6 +186,10 @@ export class GatewayTransport extends BaseTransport {
     );
 
     this.#reconnectAttempts += 1;
+    void this.#emitDebugEvent("reconnect_scheduled", {
+      attempt: this.#reconnectAttempts,
+      delay
+    });
     this.#reconnectTimer = setTimeout(() => {
       void this.#openSocket().catch(async (error) => {
         await this.emitError(this.#normalizeError(error, "GatewayTransport failed to reconnect."));
@@ -170,7 +229,13 @@ export class GatewayTransport extends BaseTransport {
   }
 
   async #handleGatewayPayload(payload: unknown): Promise<void> {
+    const opcode = (payload as { op?: number }).op;
     this.#updateSequence(payload);
+    await this.#emitDebugEvent("payload_received", {
+      opcode,
+      state: this.#state,
+      sequence: this.#session.sequence ?? undefined
+    });
 
     if (this.#isHelloPayload(payload)) {
       const heartbeatInterval = this.#resolveHeartbeatInterval(payload);
@@ -178,16 +243,48 @@ export class GatewayTransport extends BaseTransport {
         this.#startHeartbeat(heartbeatInterval);
       }
 
-      this.#sendIdentifyIfConfigured();
+      this.#sendSessionStartPayload();
       return;
     }
 
     if (this.#isHeartbeatAckPayload(payload)) {
       this.#awaitingHeartbeatAck = false;
+      await this.#emitDebugEvent("heartbeat_ack", {
+        sequence: this.#session.sequence ?? undefined
+      });
       return;
     }
 
-    if (this.#isReconnectPayload(payload) || this.#isInvalidSessionPayload(payload)) {
+    if (this.#isReconnectPayload(payload)) {
+      await this.emitError(
+        new GatewayProtocolError({
+          message: "Gateway requested reconnect.",
+          code: "GATEWAY_RECONNECT_REQUESTED",
+          state: this.#state,
+          retryable: true,
+          opcode
+        })
+      );
+      this.#socket?.close();
+      return;
+    }
+
+    if (this.#isInvalidSessionPayload(payload)) {
+      this.#session = {
+        sessionId: undefined,
+        sequence: this.#session.sequence,
+        resumable: false
+      };
+      await this.emitGatewaySessionUpdate({ ...this.#session });
+      await this.emitError(
+        new GatewayProtocolError({
+          message: "Gateway session invalidated.",
+          code: "GATEWAY_INVALID_SESSION",
+          state: this.#state,
+          retryable: true,
+          opcode
+        })
+      );
       this.#socket?.close();
       return;
     }
@@ -203,6 +300,7 @@ export class GatewayTransport extends BaseTransport {
 
     const dispatchEvent = this.#parseDispatchEvent(payload);
     if (dispatchEvent) {
+      await this.#handleDispatchLifecycle(dispatchEvent);
       await this.emitGatewayDispatch(dispatchEvent);
     }
 
@@ -215,9 +313,20 @@ export class GatewayTransport extends BaseTransport {
   #startHeartbeat(intervalMs: number): void {
     this.#stopHeartbeat();
     this.#awaitingHeartbeatAck = false;
+    void this.#emitDebugEvent("heartbeat_started", {
+      intervalMs
+    });
 
     this.#heartbeatTimer = setInterval(() => {
       if (this.#awaitingHeartbeatAck) {
+        void this.emitError(
+          new GatewayTransportError({
+            message: "Gateway heartbeat was not acknowledged in time.",
+            code: "GATEWAY_HEARTBEAT_TIMEOUT",
+            state: this.#state,
+            retryable: true
+          })
+        );
         this.#socket?.close();
         return;
       }
@@ -241,11 +350,25 @@ export class GatewayTransport extends BaseTransport {
     }
 
     this.#awaitingHeartbeatAck = true;
+    void this.#emitDebugEvent("heartbeat_sent", {
+      sequence: this.#session.sequence ?? undefined
+    });
     this.#socket.send(JSON.stringify(this.#createHeartbeatPayload()));
   }
 
-  #sendIdentifyIfConfigured(): void {
+  #sendSessionStartPayload(): void {
     if (!this.#socket || this.#socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const resumePayload = this.#buildResumePayload();
+    if (resumePayload) {
+      void this.#setState("resuming");
+      void this.#emitDebugEvent("resume_sent", {
+        sequence: this.#session.sequence ?? undefined,
+        sessionId: this.#session.sessionId
+      });
+      this.#socket.send(JSON.stringify(resumePayload));
       return;
     }
 
@@ -257,6 +380,8 @@ export class GatewayTransport extends BaseTransport {
       return;
     }
 
+    void this.#setState("identifying");
+    void this.#emitDebugEvent("identify_sent");
     this.#socket.send(JSON.stringify(payload));
   }
 
@@ -317,11 +442,23 @@ export class GatewayTransport extends BaseTransport {
     const maybePayload = payload as { s?: number | null };
     if (typeof maybePayload.s === "number") {
       this.#lastSequence = maybePayload.s;
+      this.#session = {
+        ...this.#session,
+        sequence: maybePayload.s
+      };
+      void this.emitGatewaySessionUpdate({ ...this.#session });
     }
   }
 
   #normalizeError(error: unknown, fallback: string): Error {
-    return error instanceof Error ? error : new Error(fallback);
+    return error instanceof Error
+      ? error
+      : new GatewayTransportError({
+          message: fallback,
+          code: "GATEWAY_UNKNOWN_ERROR",
+          state: this.#state,
+          retryable: false
+        });
   }
 
   #parseDispatchEvent(payload: unknown) {
@@ -345,5 +482,93 @@ export class GatewayTransport extends BaseTransport {
         t: envelope.t
       }
     };
+  }
+
+  async #handleDispatchLifecycle(event: FluxerGatewayDispatchEvent): Promise<void> {
+    if (event.type === "READY") {
+      const data = event.data as { session_id?: string };
+      this.#session = {
+        sessionId: data.session_id,
+        sequence: event.sequence,
+        resumable: Boolean(data.session_id)
+      };
+      await this.emitGatewaySessionUpdate({ ...this.#session });
+      await this.#setState("ready");
+      await this.#emitDebugEvent("session_ready", {
+        sessionId: data.session_id
+      });
+      return;
+    }
+
+    if (event.type === "RESUMED") {
+      this.#session = {
+        ...this.#session,
+        resumable: true
+      };
+      await this.emitGatewaySessionUpdate({ ...this.#session });
+      await this.#setState("ready", "resumed");
+      await this.#emitDebugEvent("session_resumed", {
+        sessionId: this.#session.sessionId
+      });
+    }
+  }
+
+  #buildResumePayload(): unknown | undefined {
+    const sessionId = this.#session.sessionId;
+
+    if (!this.#session.resumable || !sessionId) {
+      return undefined;
+    }
+
+    if (this.#options.buildResumePayload) {
+      return this.#options.buildResumePayload({
+        auth: this.#options.auth,
+        sessionId,
+        sequence: this.#session.sequence
+      });
+    }
+
+    if (!this.#options.auth) {
+      return undefined;
+    }
+
+    return {
+      op: 6,
+      d: {
+        token: this.#options.auth.token,
+        session_id: sessionId,
+        seq: this.#session.sequence
+      }
+    };
+  }
+
+  async #setState(state: FluxerGatewayConnectionState, reason?: string): Promise<void> {
+    if (this.#state === state) {
+      return;
+    }
+
+    const previousState = this.#state;
+    this.#state = state;
+    await this.emitGatewayStateChange({
+      previousState,
+      state,
+      reason
+    });
+    await this.#emitDebugEvent("state_changed", {
+      previousState,
+      state,
+      reason
+    });
+  }
+
+  async #emitDebugEvent(event: string, data?: Record<string, unknown>): Promise<void> {
+    const payload: FluxerDebugEvent = {
+      scope: "gateway",
+      event,
+      timestamp: new Date().toISOString(),
+      data
+    };
+
+    await this.emitDebug(payload);
   }
 }

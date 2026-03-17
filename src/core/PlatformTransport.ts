@@ -1,6 +1,9 @@
 import { BaseTransport } from "./Transport.js";
 import type {
+  FluxerDebugHandler,
   FluxerGatewayDispatchHandler,
+  FluxerGatewaySessionHandler,
+  FluxerGatewayStateHandler,
   FluxerMessageHandler,
   FluxerTransport,
   SendMessagePayload
@@ -35,6 +38,22 @@ export class PlatformTransport extends BaseTransport {
   public override onGatewayDispatch(handler: FluxerGatewayDispatchHandler): void {
     super.onGatewayDispatch(handler);
     this.#inbound.onGatewayDispatch(handler);
+  }
+
+  public override onGatewayStateChange(handler: FluxerGatewayStateHandler): void {
+    super.onGatewayStateChange(handler);
+    this.#inbound.onGatewayStateChange(handler);
+  }
+
+  public override onGatewaySessionUpdate(handler: FluxerGatewaySessionHandler): void {
+    super.onGatewaySessionUpdate(handler);
+    this.#inbound.onGatewaySessionUpdate(handler);
+  }
+
+  public override onDebug(handler: FluxerDebugHandler): void {
+    super.onDebug(handler);
+    this.#inbound.onDebug(handler);
+    this.#outbound.onDebug(handler);
   }
 
   public async connect(): Promise<void> {
