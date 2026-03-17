@@ -41,16 +41,58 @@ export interface FluxerMessageReference {
 export interface CommandContext {
   client: FluxerClientLike;
   bot: FluxerBotLike;
+  command: FluxerCommand;
   message: FluxerMessage;
   args: string[];
   commandName: string;
+  state: Record<string, unknown>;
   reply: (content: string) => Promise<void>;
+}
+
+export interface FluxerGuardDecision {
+  allowed: boolean;
+  reason?: string;
+}
+
+export type FluxerGuardResult = boolean | string | FluxerGuardDecision;
+export type FluxerCommandGuard = (
+  context: CommandContext
+) => Promise<FluxerGuardResult> | FluxerGuardResult;
+
+export type FluxerCommandNext = () => Promise<void>;
+export type FluxerCommandMiddleware = (
+  context: CommandContext,
+  next: FluxerCommandNext
+) => Promise<void> | void;
+
+export interface FluxerCommandExecutionHooks {
+  beforeCommand?: (context: CommandContext) => Promise<void> | void;
+  afterCommand?: (context: CommandContext) => Promise<void> | void;
+  commandNotFound?: (context: {
+    client: FluxerClientLike;
+    bot: FluxerBotLike;
+    message: FluxerMessage;
+    commandName: string;
+    args: string[];
+  }) => Promise<void> | void;
+  commandBlocked?: (context: {
+    command: FluxerCommand;
+    commandContext: CommandContext;
+    result: FluxerGuardDecision;
+  }) => Promise<void> | void;
+  commandError?: (context: {
+    command: FluxerCommand;
+    commandContext: CommandContext;
+    error: Error;
+  }) => Promise<void> | void;
 }
 
 export interface FluxerCommand {
   name: string;
   aliases?: string[];
   description?: string;
+  guards?: FluxerCommandGuard[];
+  middleware?: FluxerCommandMiddleware[];
   execute: (context: CommandContext) => Promise<void> | void;
 }
 
@@ -58,6 +100,9 @@ export interface FluxerBotOptions {
   name: string;
   prefix?: string;
   ignoreBots?: boolean;
+  guards?: FluxerCommandGuard[];
+  middleware?: FluxerCommandMiddleware[];
+  hooks?: FluxerCommandExecutionHooks;
 }
 
 export interface FluxerEventMap {

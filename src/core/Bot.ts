@@ -1,6 +1,9 @@
 import type { FluxerClient } from "./Client.js";
 import type {
   CommandContext,
+  FluxerCommandExecutionHooks,
+  FluxerCommandGuard,
+  FluxerCommandMiddleware,
   FluxerBotOptions,
   FluxerCommand,
   FluxerMessage
@@ -13,11 +16,17 @@ export class FluxerBot {
 
   #client?: FluxerClient;
   #commands = new Map<string, FluxerCommand>();
+  #guards: FluxerCommandGuard[] = [];
+  #middleware: FluxerCommandMiddleware[] = [];
+  #hooks: FluxerCommandExecutionHooks = {};
 
   public constructor(options: FluxerBotOptions) {
     this.name = options.name;
     this.prefix = options.prefix ?? "!";
     this.ignoreBots = options.ignoreBots ?? true;
+    this.#guards = [...(options.guards ?? [])];
+    this.#middleware = [...(options.middleware ?? [])];
+    this.#hooks = { ...(options.hooks ?? {}) };
   }
 
   public attach(client: FluxerClient): void {
@@ -30,6 +39,25 @@ export class FluxerBot {
     for (const alias of command.aliases ?? []) {
       this.#commands.set(alias, command);
     }
+
+    return this;
+  }
+
+  public use(middleware: FluxerCommandMiddleware): this {
+    this.#middleware.push(middleware);
+    return this;
+  }
+
+  public guard(guard: FluxerCommandGuard): this {
+    this.#guards.push(guard);
+    return this;
+  }
+
+  public hooks(hooks: FluxerCommandExecutionHooks): this {
+    this.#hooks = {
+      ...this.#hooks,
+      ...hooks
+    };
 
     return this;
   }
@@ -58,21 +86,116 @@ export class FluxerBot {
 
     const command = this.#commands.get(commandName);
     if (!command) {
+      await this.#hooks.commandNotFound?.({
+        client: this.#client,
+        bot: this,
+        message,
+        commandName,
+        args
+      });
       return;
     }
 
     const context: CommandContext = {
       client: this.#client,
       bot: this,
+      command,
       message,
       args,
       commandName,
+      state: {},
       reply: async (content: string) => {
         await this.#client?.sendMessage(message.channel.id, content);
       }
     };
 
-    await command.execute(context);
-    this.#client.emit("commandExecuted", { commandName, message });
+    const blockedResult = await this.#runGuards(context, command);
+    if (blockedResult) {
+      await this.#hooks.commandBlocked?.({
+        command,
+        commandContext: context,
+        result: blockedResult
+      });
+
+      if (blockedResult.reason) {
+        await context.reply(blockedResult.reason);
+      }
+
+      return;
+    }
+
+    try {
+      await this.#hooks.beforeCommand?.(context);
+      await this.#runMiddleware(context, command);
+      await this.#hooks.afterCommand?.(context);
+      this.#client.emit("commandExecuted", { commandName, message });
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Command execution failed.");
+      await this.#hooks.commandError?.({
+        command,
+        commandContext: context,
+        error: normalizedError
+      });
+      this.#client.emit("error", normalizedError);
+    }
+  }
+
+  async #runGuards(
+    context: CommandContext,
+    command: FluxerCommand
+  ): Promise<{ allowed: boolean; reason?: string } | null> {
+    const guards = [...this.#guards, ...(command.guards ?? [])];
+
+    for (const guard of guards) {
+      const result = await guard(context);
+      const normalizedResult = this.#normalizeGuardResult(result);
+      if (!normalizedResult.allowed) {
+        return normalizedResult;
+      }
+    }
+
+    return null;
+  }
+
+  async #runMiddleware(context: CommandContext, command: FluxerCommand): Promise<void> {
+    const middleware = [...this.#middleware, ...(command.middleware ?? [])];
+    let index = -1;
+
+    const dispatch = async (nextIndex: number): Promise<void> => {
+      if (nextIndex <= index) {
+        throw new Error("Middleware called next() multiple times.");
+      }
+
+      index = nextIndex;
+      const current = middleware[nextIndex];
+
+      if (!current) {
+        await command.execute(context);
+        return;
+      }
+
+      await current(context, async () => {
+        await dispatch(nextIndex + 1);
+      });
+    };
+
+    await dispatch(0);
+  }
+
+  #normalizeGuardResult(
+    result: boolean | string | { allowed: boolean; reason?: string }
+  ): { allowed: boolean; reason?: string } {
+    if (typeof result === "boolean") {
+      return { allowed: result };
+    }
+
+    if (typeof result === "string") {
+      return {
+        allowed: false,
+        reason: result
+      };
+    }
+
+    return result;
   }
 }

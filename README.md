@@ -11,6 +11,7 @@ This bootstrap gives you a clean starting point for a bot SDK:
 - A transport abstraction for real Fluxer adapters later
 - A reusable `FluxerBot` base class
 - Command registration and prefix parsing
+- Middleware, guards, and lifecycle hooks
 - An example bot entrypoint for local iteration
 
 ## Getting started
@@ -28,14 +29,28 @@ import { FluxerBot, FluxerClient } from "fluxer-js";
 const client = new FluxerClient();
 const bot = new FluxerBot({
   name: "EchoBot",
-  prefix: "!"
+  prefix: "!",
+  hooks: {
+    commandError: async ({ commandContext }) => {
+      await commandContext.reply("That command failed.");
+    }
+  }
+});
+
+bot.guard(({ message }) => message.channel.type !== "dm" || "DMs are disabled.");
+
+bot.use(async (context, next) => {
+  const startedAt = Date.now();
+  await next();
+  context.state.durationMs = Date.now() - startedAt;
 });
 
 bot.command({
   name: "ping",
   description: "Replies with pong",
-  execute: async ({ reply }) => {
+  execute: async ({ reply, state }) => {
     await reply("pong");
+    state.lastCommand = "ping";
   }
 });
 
@@ -98,12 +113,13 @@ Current state is the SDK foundation layer:
 - Command parsing and bot lifecycle are in place
 - The client is now transport-driven instead of hard-coded to console output
 - `MockTransport` supports local development while the real Fluxer transport is built
+- Middleware, guard, and hook execution now exist as first-class bot framework features
 
 This is still not a production framework. The biggest missing pieces are:
 
 - Full gateway event opcode and payload coverage
 - Rich message payload builders for embeds and attachments
-- Middleware, permissions, and richer command routing
+- Permissions, modules/plugins, and richer command routing
 - Testing, packaging, and versioned API guarantees
 
 ## Next steps
