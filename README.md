@@ -178,10 +178,11 @@ Current state is the SDK foundation layer:
 - Build output and command parsing are now deterministic and test-backed
 - Rich message composition is typed and transport-aware
 - Gateway dispatches and higher-level plugins now have first-class entry points
+- Gateway normalization now covers members, presence, typing, channels, guilds, and messages
 
 This is still not a production framework. The biggest missing pieces are:
 
-- More gateway event payload normalization across the full Fluxer surface
+- More gateway event payload normalization across the remaining Fluxer surface
 - Rich message payload builders for embeds and attachments
 - Plugin packaging, richer permissions, and more advanced command routing
 - Packaging and versioned API guarantees

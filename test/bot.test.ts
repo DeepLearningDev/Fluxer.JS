@@ -383,3 +383,120 @@ test("installs plugins and exposes their commands", async () => {
   assert.deepEqual(bot.plugins, ["essentials"]);
   assert.deepEqual(replies, [{ content: "Fluxer.JS keeps the core sharp." }]);
 });
+
+test("maps member, presence, typing, and user gateway events", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const events: string[] = [];
+
+  client.on("guildMemberAdd", (member) => {
+    events.push(`member-add:${member.user.username}`);
+  });
+
+  client.on("presenceUpdate", (presence) => {
+    events.push(`presence:${presence.userId}:${presence.status}`);
+  });
+
+  client.on("typingStart", (typing) => {
+    events.push(`typing:${typing.userId}:${typing.channelId}`);
+  });
+
+  client.on("userUpdate", (user) => {
+    events.push(`user:${user.username}`);
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "GUILD_MEMBER_ADD",
+    sequence: 3,
+    data: {
+      guild_id: "guild_1",
+      nick: "Flux Guy",
+      roles: ["role_1"],
+      joined_at: "2026-03-17T05:00:00.000Z",
+      user: {
+        id: "user_1",
+        username: "fluxguy"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        guild_id: "guild_1",
+        nick: "Flux Guy",
+        roles: ["role_1"],
+        joined_at: "2026-03-17T05:00:00.000Z",
+        user: {
+          id: "user_1",
+          username: "fluxguy"
+        }
+      },
+      s: 3,
+      t: "GUILD_MEMBER_ADD"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "PRESENCE_UPDATE",
+    sequence: 4,
+    data: {
+      user: { id: "user_1" },
+      status: "online",
+      activities: [{ name: "Building bots", type: 0 }]
+    },
+    raw: {
+      op: 0,
+      d: {
+        user: { id: "user_1" },
+        status: "online",
+        activities: [{ name: "Building bots", type: 0 }]
+      },
+      s: 4,
+      t: "PRESENCE_UPDATE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "TYPING_START",
+    sequence: 5,
+    data: {
+      channel_id: "general",
+      user_id: "user_1",
+      timestamp: 1_763_086_800
+    },
+    raw: {
+      op: 0,
+      d: {
+        channel_id: "general",
+        user_id: "user_1",
+        timestamp: 1_763_086_800
+      },
+      s: 5,
+      t: "TYPING_START"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "USER_UPDATE",
+    sequence: 6,
+    data: {
+      id: "user_1",
+      username: "fluxguy"
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "user_1",
+        username: "fluxguy"
+      },
+      s: 6,
+      t: "USER_UPDATE"
+    }
+  });
+
+  assert.deepEqual(events, [
+    "member-add:fluxguy",
+    "presence:user_1:online",
+    "typing:user_1:general",
+    "user:fluxguy"
+  ]);
+});

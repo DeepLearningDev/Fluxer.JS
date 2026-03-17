@@ -6,8 +6,12 @@ import type {
   FluxerEventMap,
   FluxerGatewayDispatchEvent,
   FluxerGuild,
+  FluxerGuildMember,
   FluxerMessage,
+  FluxerPresence,
   FluxerTransport,
+  FluxerTypingStartEvent,
+  FluxerUser,
   MessageBuilderLike,
   SendMessagePayload
 } from "./types.js";
@@ -129,6 +133,52 @@ export class FluxerClient extends EventEmitter {
         }
         return;
       }
+      case "GUILD_MEMBER_ADD":
+      case "GUILD_MEMBER_UPDATE": {
+        const member = this.#parseGatewayGuildMember(event);
+        if (member) {
+          this.emit(
+            event.type === "GUILD_MEMBER_ADD" ? "guildMemberAdd" : "guildMemberUpdate",
+            member
+          );
+        }
+        return;
+      }
+      case "GUILD_MEMBER_REMOVE": {
+        const payload = event.data as {
+          guild_id?: string;
+          user?: { id?: string; username?: string; global_name?: string; bot?: boolean };
+        };
+        const user = this.#parseGatewayUser(payload.user);
+        if (payload.guild_id && user) {
+          this.emit("guildMemberRemove", {
+            guildId: payload.guild_id,
+            user
+          });
+        }
+        return;
+      }
+      case "PRESENCE_UPDATE": {
+        const presence = this.#parseGatewayPresence(event);
+        if (presence) {
+          this.emit("presenceUpdate", presence);
+        }
+        return;
+      }
+      case "TYPING_START": {
+        const typingStart = this.#parseTypingStart(event);
+        if (typingStart) {
+          this.emit("typingStart", typingStart);
+        }
+        return;
+      }
+      case "USER_UPDATE": {
+        const user = this.#parseGatewayUser(event.data);
+        if (user) {
+          this.emit("userUpdate", user);
+        }
+        return;
+      }
       default:
         return;
     }
@@ -199,6 +249,92 @@ export class FluxerClient extends EventEmitter {
       id: payload.id,
       name: payload.name,
       iconUrl: payload.icon
+    };
+  }
+
+  #parseGatewayGuildMember(event: FluxerGatewayDispatchEvent): FluxerGuildMember | null {
+    const payload = event.data as {
+      guild_id?: string;
+      nick?: string;
+      roles?: string[];
+      joined_at?: string;
+      user?: { id?: string; username?: string; global_name?: string; bot?: boolean };
+    };
+
+    const user = this.#parseGatewayUser(payload.user);
+    if (!payload.guild_id || !user) {
+      return null;
+    }
+
+    return {
+      user,
+      guildId: payload.guild_id,
+      nickname: payload.nick,
+      roles: payload.roles,
+      joinedAt: payload.joined_at ? new Date(payload.joined_at) : undefined
+    };
+  }
+
+  #parseGatewayPresence(event: FluxerGatewayDispatchEvent): FluxerPresence | null {
+    const payload = event.data as {
+      user?: { id?: string };
+      status?: FluxerPresence["status"];
+      activities?: Array<{ name?: string; type?: number }>;
+    };
+
+    if (!payload.user?.id || !payload.status) {
+      return null;
+    }
+
+    return {
+      userId: payload.user.id,
+      status: payload.status,
+      activities: payload.activities
+        ?.filter((activity): activity is { name: string; type?: number } => typeof activity.name === "string")
+        .map((activity) => ({
+          name: activity.name,
+          type: activity.type
+        }))
+    };
+  }
+
+  #parseTypingStart(event: FluxerGatewayDispatchEvent): FluxerTypingStartEvent | null {
+    const payload = event.data as {
+      channel_id?: string;
+      user_id?: string;
+      guild_id?: string;
+      timestamp?: number;
+    };
+
+    if (!payload.channel_id || !payload.user_id) {
+      return null;
+    }
+
+    return {
+      channelId: payload.channel_id,
+      userId: payload.user_id,
+      guildId: payload.guild_id,
+      startedAt: typeof payload.timestamp === "number" ? new Date(payload.timestamp * 1000) : undefined
+    };
+  }
+
+  #parseGatewayUser(payload: unknown): FluxerUser | null {
+    const user = payload as {
+      id?: string;
+      username?: string;
+      global_name?: string;
+      bot?: boolean;
+    };
+
+    if (!user?.id || !user.username) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.global_name,
+      isBot: user.bot
     };
   }
 }

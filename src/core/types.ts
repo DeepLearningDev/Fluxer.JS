@@ -25,6 +25,30 @@ export interface FluxerGuild {
   iconUrl?: string;
 }
 
+export interface FluxerGuildMember {
+  user: FluxerUser;
+  guildId: string;
+  nickname?: string;
+  roles?: string[];
+  joinedAt?: Date;
+}
+
+export interface FluxerPresence {
+  userId: string;
+  status: "online" | "idle" | "dnd" | "offline" | "invisible" | string;
+  activities?: Array<{
+    name: string;
+    type?: number;
+  }>;
+}
+
+export interface FluxerTypingStartEvent {
+  channelId: string;
+  userId: string;
+  guildId?: string;
+  startedAt?: Date;
+}
+
 export interface MessageBuilderLike {
   toJSON(): Omit<SendMessagePayload, "channelId">;
 }
@@ -189,6 +213,12 @@ export interface FluxerEventMap {
   guildCreate: FluxerGuild;
   guildUpdate: FluxerGuild;
   guildDelete: { id: string };
+  guildMemberAdd: FluxerGuildMember;
+  guildMemberUpdate: FluxerGuildMember;
+  guildMemberRemove: { guildId: string; user: FluxerUser };
+  presenceUpdate: FluxerPresence;
+  typingStart: FluxerTypingStartEvent;
+  userUpdate: FluxerUser;
   gatewayDispatch: FluxerGatewayDispatchEvent;
   commandExecuted: { commandName: string; message: FluxerMessage };
   error: Error;
