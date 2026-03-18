@@ -1228,16 +1228,137 @@ test("supports command groups and multi-word subcommands", async () => {
   await client.connect();
   await transport.injectMessage(createMessage("!admin ban fluxguy"));
   await transport.injectMessage(createMessage("!mod logs"));
+  await transport.injectMessage(createMessage("!help"));
   await transport.injectMessage(createMessage("!help admin"));
+  await transport.injectMessage(createMessage("!help admin ban"));
 
   assert.equal(replies[0]?.content, "banned:fluxguy");
   assert.equal(replies[1]?.content, "audit-log");
   assert.equal(
     replies[2]?.content,
-    "Usage: !admin <subcommand>\nAdministrative commands.\nSubcommands: !admin ban <target> - Ban a member. | !admin audit-log - View the audit log.\nExamples: !admin ban fluxguy | !admin audit-log"
+    "Commands:\n!about - Show information about the bot.\n!help [command...] - Show the available commands for the current bot.\n\nGroups:\n!admin <subcommand> - Administrative commands."
+  );
+  assert.equal(
+    replies[3]?.content,
+    "Usage: !admin <subcommand>\nAdministrative commands.\nAliases: mod\nSubcommands: !admin ban <target> - Ban a member. | !admin audit-log - View the audit log.\nExamples: !admin ban fluxguy | !admin audit-log"
+  );
+  assert.equal(
+    replies[4]?.content,
+    "Usage: !admin ban <target>\nBan a member.\nAliases: mod ban\nArguments: target (required)"
   );
   assert.equal(bot.resolveCommandFromInput("admin ban")?.name, "admin ban");
   assert.equal(bot.resolveCommandGroup("mod")?.name, "admin");
+});
+
+test("creates structured command catalogs from bot metadata", () => {
+  const bot = new FluxerBot({
+    name: "CatalogBot",
+    prefix: "!"
+  });
+
+  bot.command(
+    defineCommand({
+      name: "echo",
+      description: "Echo text back.",
+      schema: {
+        args: [
+          {
+            name: "text",
+            description: "The text to send back.",
+            required: true,
+            rest: true
+          }
+        ] as const,
+        flags: [
+          {
+            name: "upper",
+            short: "u",
+            description: "Convert the text to uppercase."
+          }
+        ] as const
+      },
+      execute: async () => {}
+    })
+  );
+
+  bot.command(
+    defineCommandGroup({
+      name: "admin",
+      description: "Administrative commands.",
+      aliases: ["mod"],
+      commands: [
+        defineCommand({
+          name: "ban",
+          description: "Ban a member.",
+          execute: async () => {}
+        })
+      ]
+    })
+  );
+
+  const catalog = bot.createCommandCatalog();
+
+  assert.deepEqual(catalog.commands, [
+    {
+      name: "echo",
+      description: "Echo text back.",
+      usage: "Usage: !echo <text...> [-u, --upper]",
+      aliases: [],
+      examples: [],
+      hidden: false,
+      group: undefined,
+      subcommand: undefined,
+      args: [
+        {
+          name: "text",
+          description: "The text to send back.",
+          required: true,
+          rest: true,
+          type: "string",
+          defaultValue: undefined,
+          enum: undefined,
+          coerced: false
+        }
+      ],
+      flags: [
+        {
+          name: "upper",
+          short: "u",
+          description: "Convert the text to uppercase.",
+          required: false,
+          multiple: false,
+          type: "boolean",
+          defaultValue: undefined,
+          enum: undefined,
+          coerced: false
+        }
+      ]
+    }
+  ]);
+  assert.deepEqual(catalog.groups, [
+    {
+      name: "admin",
+      description: "Administrative commands.",
+      usage: "Usage: !admin <subcommand>",
+      aliases: ["mod"],
+      examples: [],
+      hidden: false,
+      commands: [
+        {
+          name: "admin ban",
+          description: "Ban a member.",
+          usage: "Usage: !admin ban",
+          aliases: [],
+          examples: [],
+          hidden: false,
+          group: "admin",
+          subcommand: "ban",
+          args: [],
+          flags: []
+        }
+      ]
+    }
+  ]);
 });
 
 test("maps member, presence, typing, and user gateway events", async () => {

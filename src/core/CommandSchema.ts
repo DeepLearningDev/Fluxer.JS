@@ -1,9 +1,15 @@
 import { CommandSchemaError } from "./errors.js";
 import type {
+  FluxerCommandArgumentDescriptor,
   FluxerCommand,
   FluxerCommandGroup,
+  FluxerCommandCatalog,
   FluxerCommandArgumentDefinition,
+  FluxerCommandCatalogOptions,
+  FluxerCommandDescriptor,
   FluxerCommandFlagDefinition,
+  FluxerCommandFlagDescriptor,
+  FluxerCommandGroupDescriptor,
   FluxerCommandSchema,
   FluxerCommandValueType,
   FluxerParsedCommandInput
@@ -175,103 +181,249 @@ export function formatCommandUsageFromCommand(
   return `Usage: ${(options?.prefix ?? "")}${command.name}`;
 }
 
+export function inspectCommand(
+  command: Pick<
+    FluxerCommand,
+    "name" | "aliases" | "description" | "examples" | "usage" | "schema" | "hidden" | "group" | "subcommand"
+  >,
+  options?: { prefix?: string }
+): FluxerCommandDescriptor {
+  return {
+    name: command.name,
+    description: command.description,
+    usage: formatCommandUsageFromCommand(command, options),
+    aliases: [...(command.aliases ?? [])],
+    examples: [...(command.examples ?? [])],
+    hidden: command.hidden ?? false,
+    group: command.group,
+    subcommand: command.subcommand,
+    args: (command.schema?.args ?? []).map((argument) => inspectArgument(argument)),
+    flags: (command.schema?.flags ?? []).map((flag) => inspectFlag(flag))
+  };
+}
+
+export function inspectCommandGroup(
+  group: Pick<
+    FluxerCommandGroup,
+    "name" | "aliases" | "description" | "usage" | "examples" | "hidden" | "commands"
+  >,
+  options?: { prefix?: string }
+): FluxerCommandGroupDescriptor {
+  return {
+    name: group.name,
+    description: group.description,
+    usage: group.usage
+      ? group.usage.startsWith("Usage:")
+        ? group.usage
+        : `Usage: ${group.usage}`
+      : `Usage: ${(options?.prefix ?? "")}${group.name} <subcommand>`,
+    aliases: [...(group.aliases ?? [])],
+    examples: [...(group.examples ?? [])],
+    hidden: group.hidden ?? false,
+    commands: group.commands.map((command) =>
+      inspectCommand(
+        {
+          ...command,
+          name: `${group.name} ${command.name}`.trim(),
+          hidden: group.hidden || command.hidden,
+          group: group.name,
+          subcommand: command.name
+        },
+        options
+      )
+    )
+  };
+}
+
+export function createCommandCatalog(
+  source: {
+    commands: readonly FluxerCommand[];
+    groups?: readonly FluxerCommandGroup[];
+  },
+  options?: ({ prefix?: string } & FluxerCommandCatalogOptions)
+): FluxerCommandCatalog {
+  const includeHidden = options?.includeHidden ?? false;
+  const groups = (source.groups ?? [])
+    .filter((group) => includeHidden || !group.hidden)
+    .map((group) => inspectCommandGroup(group, options))
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  const commands = source.commands
+    .filter((command) => !command.group)
+    .filter((command) => includeHidden || !command.hidden)
+    .map((command) => inspectCommand(command, options))
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  return {
+    commands,
+    groups
+  };
+}
+
+export function describeCommandCatalog(catalog: FluxerCommandCatalog): string {
+  const sections: string[] = [];
+
+  if (catalog.commands.length > 0) {
+    sections.push(
+      `Commands:\n${catalog.commands
+        .map((command) => formatDescriptorSummary(command))
+        .join("\n")}`
+    );
+  }
+
+  if (catalog.groups.length > 0) {
+    sections.push(
+      `Groups:\n${catalog.groups
+        .map((group) => formatGroupDescriptorSummary(group))
+        .join("\n")}`
+    );
+  }
+
+  return sections.join("\n\n");
+}
+
 export function describeCommand(
   command: Pick<
     FluxerCommand,
-    "name" | "aliases" | "description" | "examples" | "usage" | "schema"
+    "name" | "aliases" | "description" | "examples" | "usage" | "schema" | "hidden" | "group" | "subcommand"
   >,
   options?: { prefix?: string }
 ): string {
-  const lines = [formatCommandUsageFromCommand(command, options)];
+  const descriptor = inspectCommand(command, options);
+  const lines = [descriptor.usage];
 
-  if (command.description) {
-    lines.push(command.description);
+  if (descriptor.description) {
+    lines.push(descriptor.description);
   }
 
-  if (command.aliases && command.aliases.length > 0) {
-    lines.push(`Aliases: ${command.aliases.join(", ")}`);
+  if (descriptor.aliases.length > 0) {
+    lines.push(`Aliases: ${descriptor.aliases.join(", ")}`);
   }
 
-  if (command.schema?.args && command.schema.args.length > 0) {
+  if (descriptor.args.length > 0) {
     lines.push(
-      `Arguments: ${command.schema.args
-        .map((argument) => {
-          const modifiers = [
-            argument.required ? "required" : "optional",
-            argument.rest ? "rest" : undefined,
-            argument.type && argument.type !== "string" ? argument.type : undefined,
-            argument.defaultValue !== undefined ? `default=${String(argument.defaultValue)}` : undefined,
-            argument.enum && argument.enum.length > 0 ? `enum=${argument.enum.join("/")}` : undefined,
-            argument.coerce ? "coerced" : undefined
-          ].filter(Boolean);
-          return `${argument.name}${modifiers.length > 0 ? ` (${modifiers.join(", ")})` : ""}`;
-        })
+      `Arguments: ${descriptor.args
+        .map((argument) => formatArgumentDescriptor(argument))
         .join(", ")}`
     );
   }
 
-  if (command.schema?.flags && command.schema.flags.length > 0) {
+  if (descriptor.flags.length > 0) {
     lines.push(
-      `Flags: ${command.schema.flags
-        .map((flag) => {
-          const names = [flag.short ? `-${flag.short}` : undefined, `--${flag.name}`]
-            .filter(Boolean)
-            .join(", ");
-          const modifiers = [
-            flag.required ? "required" : "optional",
-            flag.type && flag.type !== "boolean" ? flag.type : undefined,
-            flag.multiple ? "multiple" : undefined,
-            flag.defaultValue !== undefined ? `default=${String(flag.defaultValue)}` : undefined,
-            flag.enum && flag.enum.length > 0 ? `enum=${flag.enum.join("/")}` : undefined,
-            flag.coerce ? "coerced" : undefined
-          ].filter(Boolean);
-          return `${names}${modifiers.length > 0 ? ` (${modifiers.join(", ")})` : ""}`;
-        })
+      `Flags: ${descriptor.flags
+        .map((flag) => formatFlagDescriptor(flag))
         .join("; ")}`
     );
   }
 
-  if (command.examples && command.examples.length > 0) {
-    lines.push(`Examples: ${command.examples.join(" | ")}`);
+  if (descriptor.examples.length > 0) {
+    lines.push(`Examples: ${descriptor.examples.join(" | ")}`);
   }
 
   return lines.join("\n");
 }
 
 export function describeCommandGroup(
-  group: Pick<FluxerCommandGroup, "name" | "description" | "usage" | "examples" | "commands">,
+  group: Pick<
+    FluxerCommandGroup,
+    "name" | "aliases" | "description" | "usage" | "examples" | "hidden" | "commands"
+  >,
   options?: { prefix?: string }
 ): string {
-  const usage = group.usage
-    ? group.usage.startsWith("Usage:")
-      ? group.usage
-      : `Usage: ${group.usage}`
-    : `Usage: ${(options?.prefix ?? "")}${group.name} <subcommand>`;
-  const lines = [usage];
+  const descriptor = inspectCommandGroup(group, options);
+  const lines = [descriptor.usage];
 
-  if (group.description) {
-    lines.push(group.description);
+  if (descriptor.description) {
+    lines.push(descriptor.description);
   }
 
-  lines.push(
-    `Subcommands: ${group.commands
-      .map((command) => {
-        const groupedCommand = {
-          ...command,
-          name: command.name.startsWith(`${group.name} `) ? command.name : `${group.name} ${command.name}`
-        };
-        const signature = formatCommandUsageFromCommand(groupedCommand, { prefix: options?.prefix })
-          .replace(/^Usage:\s*/, "");
-        return command.description ? `${signature} - ${command.description}` : signature;
-      })
-      .join(" | ")}`
-  );
+  if (descriptor.aliases.length > 0) {
+    lines.push(`Aliases: ${descriptor.aliases.join(", ")}`);
+  }
 
-  if (group.examples && group.examples.length > 0) {
-    lines.push(`Examples: ${group.examples.join(" | ")}`);
+  lines.push(`Subcommands: ${descriptor.commands.map((command) => formatDescriptorSummary(command)).join(" | ")}`);
+
+  if (descriptor.examples.length > 0) {
+    lines.push(`Examples: ${descriptor.examples.join(" | ")}`);
   }
 
   return lines.join("\n");
+}
+
+function inspectArgument(
+  argument: FluxerCommandArgumentDefinition
+): FluxerCommandArgumentDescriptor {
+  return {
+    name: argument.name,
+    description: argument.description,
+    required: argument.required ?? false,
+    rest: argument.rest ?? false,
+    type: getArgumentType(argument),
+    defaultValue: argument.defaultValue,
+    enum: argument.enum,
+    coerced: Boolean(argument.coerce)
+  };
+}
+
+function inspectFlag(flag: FluxerCommandFlagDefinition): FluxerCommandFlagDescriptor {
+  return {
+    name: flag.name,
+    short: flag.short,
+    description: flag.description,
+    required: flag.required ?? false,
+    multiple: flag.multiple ?? false,
+    type: getFlagType(flag),
+    defaultValue: flag.defaultValue,
+    enum: flag.enum,
+    coerced: Boolean(flag.coerce)
+  };
+}
+
+function formatDescriptorSummary(
+  descriptor: Pick<FluxerCommandDescriptor, "usage" | "description">
+): string {
+  const signature = descriptor.usage.replace(/^Usage:\s*/, "");
+  return descriptor.description
+    ? `${signature} - ${descriptor.description}`
+    : signature;
+}
+
+function formatGroupDescriptorSummary(
+  descriptor: Pick<FluxerCommandGroupDescriptor, "usage" | "description">
+): string {
+  const signature = descriptor.usage.replace(/^Usage:\s*/, "");
+  return descriptor.description
+    ? `${signature} - ${descriptor.description}`
+    : signature;
+}
+
+function formatArgumentDescriptor(argument: FluxerCommandArgumentDescriptor): string {
+  const modifiers = [
+    argument.required ? "required" : "optional",
+    argument.rest ? "rest" : undefined,
+    argument.type !== "string" ? argument.type : undefined,
+    argument.defaultValue !== undefined ? `default=${String(argument.defaultValue)}` : undefined,
+    argument.enum && argument.enum.length > 0 ? `enum=${argument.enum.join("/")}` : undefined,
+    argument.coerced ? "coerced" : undefined
+  ].filter(Boolean);
+
+  return `${argument.name}${modifiers.length > 0 ? ` (${modifiers.join(", ")})` : ""}`;
+}
+
+function formatFlagDescriptor(flag: FluxerCommandFlagDescriptor): string {
+  const names = [flag.short ? `-${flag.short}` : undefined, `--${flag.name}`]
+    .filter(Boolean)
+    .join(", ");
+  const modifiers = [
+    flag.required ? "required" : "optional",
+    flag.type !== "boolean" ? flag.type : undefined,
+    flag.multiple ? "multiple" : undefined,
+    flag.defaultValue !== undefined ? `default=${String(flag.defaultValue)}` : undefined,
+    flag.enum && flag.enum.length > 0 ? `enum=${flag.enum.join("/")}` : undefined,
+    flag.coerced ? "coerced" : undefined
+  ].filter(Boolean);
+
+  return `${names}${modifiers.length > 0 ? ` (${modifiers.join(", ")})` : ""}`;
 }
 
 function parseArgumentDefinitions(

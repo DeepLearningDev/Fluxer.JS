@@ -349,6 +349,61 @@ export interface FluxerCommandGroup {
   commands: FluxerCommand[];
 }
 
+export interface FluxerCommandArgumentDescriptor {
+  name: string;
+  description?: string;
+  required: boolean;
+  rest: boolean;
+  type: FluxerCommandValueType;
+  defaultValue?: string | number | boolean;
+  enum?: readonly (string | number | boolean)[];
+  coerced: boolean;
+}
+
+export interface FluxerCommandFlagDescriptor {
+  name: string;
+  short?: string;
+  description?: string;
+  required: boolean;
+  multiple: boolean;
+  type: FluxerCommandValueType;
+  defaultValue?: string | number | boolean;
+  enum?: readonly (string | number | boolean)[];
+  coerced: boolean;
+}
+
+export interface FluxerCommandDescriptor {
+  name: string;
+  description?: string;
+  usage: string;
+  aliases: string[];
+  examples: string[];
+  hidden: boolean;
+  group?: string;
+  subcommand?: string;
+  args: FluxerCommandArgumentDescriptor[];
+  flags: FluxerCommandFlagDescriptor[];
+}
+
+export interface FluxerCommandGroupDescriptor {
+  name: string;
+  description?: string;
+  usage: string;
+  aliases: string[];
+  examples: string[];
+  hidden: boolean;
+  commands: FluxerCommandDescriptor[];
+}
+
+export interface FluxerCommandCatalog {
+  commands: FluxerCommandDescriptor[];
+  groups: FluxerCommandGroupDescriptor[];
+}
+
+export interface FluxerCommandCatalogOptions {
+  includeHidden?: boolean;
+}
+
 export interface FluxerBotOptions {
   name: string;
   prefix?: string;
@@ -623,7 +678,9 @@ export interface FluxerBotLike {
   readonly name: string;
   readonly prefix: string;
   readonly commands: FluxerCommand[];
+  readonly commandGroups: FluxerCommandGroup[];
   command(command: FluxerCommand | FluxerCommandGroup): this;
+  createCommandCatalog(options?: FluxerCommandCatalogOptions): FluxerCommandCatalog;
   resolveCommandGroup(input: string): FluxerCommandGroup | undefined;
   resolveCommandFromInput(input: string): FluxerCommand | undefined;
   use(middleware: FluxerCommandMiddleware): this;

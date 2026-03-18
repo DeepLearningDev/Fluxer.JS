@@ -11,12 +11,16 @@ export {
   waitForMessage
 } from "./core/Collectors.js";
 export {
+  createCommandCatalog,
+  describeCommandCatalog,
   describeCommand,
   describeCommandGroup,
   defineCommand,
   defineCommandGroup,
   formatCommandUsage,
   formatCommandUsageFromCommand,
+  inspectCommand,
+  inspectCommandGroup,
   isCommandGroup,
   parseCommandSchemaInput
 } from "./core/CommandSchema.js";
@@ -75,10 +79,15 @@ export type {
   FluxerAuth,
   FluxerBotLike,
   FluxerBotOptions,
+  FluxerCommandArgumentDescriptor,
   FluxerCommandExecutionHooks,
   FluxerCommandArgumentDefinition,
+  FluxerCommandCatalog,
+  FluxerCommandCatalogOptions,
   FluxerCommandGuard,
+  FluxerCommandDescriptor,
   FluxerCommandFlagDefinition,
+  FluxerCommandFlagDescriptor,
   FluxerCommandMiddleware,
   FluxerCommandNext,
   FluxerCommandSchema,
@@ -87,6 +96,7 @@ export type {
   FluxerClientLike,
   FluxerCommand,
   FluxerCommandGroup,
+  FluxerCommandGroupDescriptor,
   FluxerDebugEvent,
   FluxerDebugHandler,
   FluxerEventMap,

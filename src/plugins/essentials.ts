@@ -1,8 +1,8 @@
 import {
+  describeCommandCatalog,
   defineCommand,
   describeCommand,
   describeCommandGroup,
-  formatCommandUsageFromCommand
 } from "../core/CommandSchema.js";
 import type { FluxerPlugin } from "../core/types.js";
 
@@ -29,22 +29,22 @@ export function createEssentialsPlugin(options: EssentialsPluginOptions = {}): F
               ] as const
             },
             execute: async ({ bot, input, reply }) => {
-              const visibleCommands = bot.commands
-                .filter((command) => options.includeHiddenCommands || !command.hidden)
-                .sort((left, right) => left.name.localeCompare(right.name));
+              const catalog = bot.createCommandCatalog({
+                includeHidden: options.includeHiddenCommands
+              });
               const requestedCommand = Array.isArray(input?.args.command)
                 ? input.args.command.join(" ").trim()
                 : "";
 
               if (requestedCommand.length > 0) {
-                const group = bot.resolveCommandGroup(requestedCommand);
-                if (group && (options.includeHiddenCommands || !group.hidden)) {
-                  await reply(describeCommandGroup(group, { prefix: bot.prefix }));
-                  return;
-                }
-
                 const command = bot.resolveCommandFromInput(requestedCommand);
                 if (!command || (!options.includeHiddenCommands && command.hidden)) {
+                  const group = bot.resolveCommandGroup(requestedCommand);
+                  if (group && (options.includeHiddenCommands || !group.hidden)) {
+                    await reply(describeCommandGroup(group, { prefix: bot.prefix }));
+                    return;
+                  }
+
                   await reply(`Unknown command "${requestedCommand}".`);
                   return;
                 }
@@ -53,14 +53,7 @@ export function createEssentialsPlugin(options: EssentialsPluginOptions = {}): F
                 return;
               }
 
-              const summaries = visibleCommands.map((command) => {
-                const signature = formatCommandUsageFromCommand(command, { prefix: bot.prefix })
-                  .replace(/^Usage:\s*/, "");
-                return command.description
-                  ? `${signature} - ${command.description}`
-                  : signature;
-              });
-              await reply(`Commands:\n${summaries.join("\n")}`);
+              await reply(describeCommandCatalog(catalog));
             }
           }),
           {

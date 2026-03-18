@@ -189,7 +189,9 @@ Generated help is now metadata-driven:
 
 - `description`, `usage`, `aliases`, `examples`, and command schemas feed the built-in `help` command
 - hidden commands stay out of the default help surface
+- `!help` now separates standalone commands from command groups
 - `!help <command>` renders detailed usage, arguments, flags, aliases, and examples
+- `!help <group>` renders grouped subcommand help with aliases and usage
 
 Conversation flows now have first-class primitives:
 
@@ -244,6 +246,15 @@ console.log(runtime.sentMessages[0]?.content); // "pong"
 ```
 
 If Fluxer uses separate HTTP and gateway channels, combine them with `PlatformTransport`.
+
+Command metadata can also be inspected programmatically when you want to build your own help UI, docs, or admin panels:
+
+```ts
+const catalog = bot.createCommandCatalog();
+
+console.log(catalog.commands);
+console.log(catalog.groups);
+```
 
 The current implementation follows the official Fluxer docs:
 

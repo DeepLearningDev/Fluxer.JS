@@ -1,6 +1,7 @@
 import { resolveMessagePayload } from "./builders.js";
 import { parseCommandInput, tokenizeCommandInput } from "./CommandParser.js";
 import {
+  createCommandCatalog as buildCommandCatalog,
   formatCommandUsage,
   isCommandGroup,
   parseCommandSchemaInput
@@ -10,6 +11,8 @@ import { CommandSchemaError } from "./errors.js";
 import type {
   CommandContext,
   FluxerCommand,
+  FluxerCommandCatalog,
+  FluxerCommandCatalogOptions,
   FluxerCommandGroup,
   FluxerCommandExecutionHooks,
   FluxerCommandSchema,
@@ -187,6 +190,23 @@ export class FluxerBot {
 
   public get commands(): AnyCommand[] {
     return [...new Set(this.#commands.values())];
+  }
+
+  public get commandGroups(): AnyCommandGroup[] {
+    return [...new Set(this.#commandGroups.values())];
+  }
+
+  public createCommandCatalog(options: FluxerCommandCatalogOptions = {}): FluxerCommandCatalog {
+    return buildCommandCatalog(
+      {
+        commands: this.commands,
+        groups: this.commandGroups
+      },
+      {
+        prefix: this.prefix,
+        ...options
+      }
+    );
   }
 
   public hasCommand(name: string): boolean {
