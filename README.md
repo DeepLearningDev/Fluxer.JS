@@ -149,6 +149,28 @@ The framework now supports three transport patterns:
 - `RestTransport` for outbound HTTP actions like sending messages
 - `GatewayTransport` for realtime inbound events over WebSocket
 
+For test-heavy workflows, `FluxerTestRuntime` now wraps `MockTransport` with fixture builders and deterministic event injection:
+
+```ts
+import { FluxerBot, FluxerTestRuntime } from "fluxer-js";
+
+const runtime = new FluxerTestRuntime();
+const bot = new FluxerBot({ name: "TestBot", prefix: "!" });
+
+bot.command({
+  name: "ping",
+  execute: async ({ reply }) => {
+    await reply("pong");
+  }
+});
+
+runtime.registerBot(bot);
+await runtime.connect();
+await runtime.injectMessage("!ping");
+
+console.log(runtime.sentMessages[0]?.content); // "pong"
+```
+
 If Fluxer uses separate HTTP and gateway channels, combine them with `PlatformTransport`.
 
 The current implementation follows the official Fluxer docs:
@@ -198,6 +220,7 @@ Current state is the SDK foundation layer:
 - Gateway normalization now covers messages, channels, guilds, moderation, invites, members, presence, typing, roles, reactions, and voice
 - Gateway runtime now exposes state/session transitions, typed protocol errors, and structured debug hooks
 - Prefix commands now support schema-based args and flags with typed command input
+- `MockTransport` now captures outbound messages and powers a reusable `FluxerTestRuntime`
 
 This is still not a production framework. The biggest missing pieces are:
 

@@ -40,6 +40,14 @@ export {
   createFluxerPlatformTransport,
   defaultParseMessageEvent
 } from "./core/createPlatformTransport.js";
+export { FluxerTestRuntime } from "./testing/TestRuntime.js";
+export {
+  createTestChannel,
+  createTestGatewayDispatch,
+  createTestGuild,
+  createTestMessage,
+  createTestUser
+} from "./testing/fixtures.js";
 export { createEssentialsPlugin } from "./plugins/essentials.js";
 export type {
   CommandContext,

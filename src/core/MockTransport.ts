@@ -1,8 +1,28 @@
 import { BaseTransport } from "./Transport.js";
-import type { FluxerMessage, SendMessagePayload } from "./types.js";
+import type {
+  FluxerDebugEvent,
+  FluxerGatewayDispatchEvent,
+  FluxerGatewaySession,
+  FluxerGatewayStateChangeEvent,
+  FluxerMessage,
+  SendMessagePayload
+} from "./types.js";
 
 export class MockTransport extends BaseTransport {
   #connected = false;
+  #sentMessages: SendMessagePayload[] = [];
+
+  public get isConnected(): boolean {
+    return this.#connected;
+  }
+
+  public get sentMessages(): SendMessagePayload[] {
+    return [...this.#sentMessages];
+  }
+
+  public clearSentMessages(): void {
+    this.#sentMessages = [];
+  }
 
   public async connect(): Promise<void> {
     this.#connected = true;
@@ -13,6 +33,7 @@ export class MockTransport extends BaseTransport {
   }
 
   public async sendMessage(payload: SendMessagePayload): Promise<void> {
+    this.#sentMessages.push(payload);
     const timestamp = new Date().toISOString();
     const content = payload.content ?? "[rich message]";
     const embedSuffix = payload.embeds?.length ? ` (+${payload.embeds.length} embed(s))` : "";
@@ -27,5 +48,21 @@ export class MockTransport extends BaseTransport {
     }
 
     await this.emitMessage(message);
+  }
+
+  public async injectGatewayDispatch(event: FluxerGatewayDispatchEvent): Promise<void> {
+    await this.emitGatewayDispatch(event);
+  }
+
+  public async injectGatewayStateChange(event: FluxerGatewayStateChangeEvent): Promise<void> {
+    await this.emitGatewayStateChange(event);
+  }
+
+  public async injectGatewaySessionUpdate(session: FluxerGatewaySession): Promise<void> {
+    await this.emitGatewaySessionUpdate(session);
+  }
+
+  public async injectDebug(event: FluxerDebugEvent): Promise<void> {
+    await this.emitDebug(event);
   }
 }

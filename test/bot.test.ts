@@ -15,6 +15,8 @@ import { GatewayTransport } from "../src/core/GatewayTransport.js";
 import { MockTransport } from "../src/core/MockTransport.js";
 import { createPermissionGuard } from "../src/core/Permissions.js";
 import { createEssentialsPlugin } from "../src/plugins/essentials.js";
+import { FluxerTestRuntime } from "../src/testing/TestRuntime.js";
+import { createTestGatewayDispatch, createTestMessage } from "../src/testing/fixtures.js";
 import type { FluxerCommand, FluxerMessage, SendMessagePayload } from "../src/core/types.js";
 
 function createMessage(content: string, overrides: Partial<FluxerMessage> = {}): FluxerMessage {
@@ -218,6 +220,91 @@ test("parses quoted command arguments", () => {
     commandName: "say",
     args: ["hello world", "test"]
   });
+});
+
+test("mock transport captures sends and emits injected runtime events", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const events: string[] = [];
+
+  client.on("gatewayStateChange", ({ state }) => {
+    events.push(`state:${state}`);
+  });
+
+  client.on("gatewaySessionUpdate", ({ sessionId, sequence }) => {
+    events.push(`session:${sessionId}:${sequence}`);
+  });
+
+  client.on("debug", ({ event }) => {
+    events.push(`debug:${event}`);
+  });
+
+  await client.connect();
+  await client.sendMessage("general", "pong");
+  await transport.injectGatewayStateChange({
+    previousState: "connected",
+    state: "ready"
+  });
+  await transport.injectGatewaySessionUpdate({
+    sessionId: "session_1",
+    sequence: 2,
+    resumable: true
+  });
+  await transport.injectDebug({
+    scope: "gateway",
+    event: "test_event",
+    timestamp: new Date().toISOString()
+  });
+
+  assert.deepEqual(transport.sentMessages, [
+    {
+      channelId: "general",
+      content: "pong"
+    }
+  ]);
+  assert.deepEqual(events, [
+    "state:ready",
+    "session:session_1:2",
+    "debug:test_event"
+  ]);
+});
+
+test("test runtime builds fixtures and drives bot interactions deterministically", async () => {
+  const runtime = new FluxerTestRuntime();
+  const bot = new FluxerBot({
+    name: "RuntimeBot",
+    prefix: "!"
+  });
+  const deletedMessages: string[] = [];
+
+  bot.command({
+    name: "ping",
+    execute: async ({ reply }) => {
+      await reply("pong");
+    }
+  });
+
+  runtime.client.on("messageDelete", ({ id }) => {
+    deletedMessages.push(id);
+  });
+
+  runtime.registerBot(bot);
+  await runtime.connect();
+  await runtime.injectMessage("!ping");
+  await runtime.injectMessage(createTestMessage("!ping", { id: "fixture_msg" }));
+  await runtime.injectGatewayDispatch(
+    createTestGatewayDispatch("MESSAGE_DELETE", {
+      id: "msg_deleted",
+      channel_id: "general"
+    })
+  );
+
+  assert.deepEqual(
+    runtime.sentMessages.map((payload) => payload.content),
+    ["pong", "pong"]
+  );
+  assert.deepEqual(deletedMessages, ["msg_deleted"]);
+  assert.equal(runtime.createMessage("!ping").id, "msg_2");
 });
 
 test("parses schema-based command args and flags", () => {
