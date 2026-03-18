@@ -25,11 +25,13 @@ import {
   CommandSchemaError,
   GatewayProtocolError,
   GatewayTransportError,
+  RestTransportError,
   WaitForTimeoutError
 } from "../src/core/errors.js";
 import { GatewayTransport } from "../src/core/GatewayTransport.js";
 import { MockTransport } from "../src/core/MockTransport.js";
 import { createPermissionGuard } from "../src/core/Permissions.js";
+import { RestTransport } from "../src/core/RestTransport.js";
 import { createEssentialsPlugin } from "../src/plugins/essentials.js";
 import { FluxerTestRuntime } from "../src/testing/TestRuntime.js";
 import { createTestGatewayDispatch, createTestMessage } from "../src/testing/fixtures.js";
@@ -2307,4 +2309,92 @@ test("emits typed diagnostics when reconnect attempts are exhausted", async () =
   assert.ok(error instanceof GatewayTransportError);
   assert.equal(error.retryable, false);
   assert.equal(error.details?.maxAttempts, 0);
+});
+
+test("emits typed diagnostics for invalid rest transport configuration", async () => {
+  const transport = new RestTransport({});
+
+  await assert.rejects(async () => {
+    await transport.connect();
+  }, (error: unknown) => {
+    assert.ok(error instanceof RestTransportError);
+    assert.equal(error.code, "REST_CONFIGURATION_INVALID");
+    assert.equal(error.retryable, false);
+    assert.deepEqual(error.details, {
+      hasBaseUrl: false,
+      hasDiscovery: false,
+      hasInstanceUrl: false
+    });
+    return true;
+  });
+});
+
+test("emits typed diagnostics when discovery fetch fails", async () => {
+  const transport = new RestTransport({
+    instanceUrl: "https://fluxer.local",
+    fetchImpl: async () => {
+      throw new Error("network down");
+    }
+  });
+
+  await assert.rejects(async () => {
+    await transport.connect();
+  }, (error: unknown) => {
+    assert.ok(error instanceof RestTransportError);
+    assert.equal(error.code, "REST_DISCOVERY_FAILED");
+    assert.equal(error.retryable, true);
+    assert.equal(error.details?.instanceUrl, "https://fluxer.local");
+    assert.equal(error.details?.message, "network down");
+    return true;
+  });
+});
+
+test("emits typed diagnostics when rest requests fail before a response", async () => {
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async () => {
+      throw new Error("socket hang up");
+    }
+  });
+
+  await assert.rejects(async () => {
+    await transport.sendMessage({
+      channelId: "general",
+      content: "hello"
+    });
+  }, (error: unknown) => {
+    assert.ok(error instanceof RestTransportError);
+    assert.equal(error.code, "REST_REQUEST_FAILED");
+    assert.equal(error.retryable, true);
+    assert.equal(error.details?.url, "https://fluxer.local/api/v1/channels/general/messages");
+    assert.equal(error.details?.channelId, "general");
+    assert.equal(error.details?.message, "socket hang up");
+    return true;
+  });
+});
+
+test("emits typed diagnostics for rest http failures", async () => {
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async () =>
+      new Response("denied", {
+        status: 403,
+        statusText: "Forbidden"
+      })
+  });
+
+  await assert.rejects(async () => {
+    await transport.sendMessage({
+      channelId: "general",
+      content: "hello"
+    });
+  }, (error: unknown) => {
+    assert.ok(error instanceof RestTransportError);
+    assert.equal(error.code, "REST_HTTP_ERROR");
+    assert.equal(error.status, 403);
+    assert.equal(error.retryable, false);
+    assert.equal(error.details?.statusText, "Forbidden");
+    assert.equal(error.details?.responseBody, "denied");
+    return true;
+  });
 });

@@ -319,6 +319,8 @@ Typed diagnostics currently cover failure modes such as:
 
 A code-by-code reference for current gateway failures lives in [docs/GatewayErrorCodes.md](./docs/GatewayErrorCodes.md).
 
+Non-gateway transport failures now also surface typed `RestTransportError` instances for configuration, discovery, request, and HTTP response failures. Reference: [docs/RestErrorCodes.md](./docs/RestErrorCodes.md).
+
 Current assumptions:
 
 - Fluxer gateway opcodes and session lifecycle are close enough to Discord-style semantics for `HELLO`, `IDENTIFY`, `RESUME`, `RECONNECT`, `INVALID_SESSION`, and `HEARTBEAT_ACK`

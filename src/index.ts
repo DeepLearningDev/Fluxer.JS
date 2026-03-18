@@ -51,6 +51,7 @@ export {
   FluxerError,
   GatewayProtocolError,
   GatewayTransportError,
+  RestTransportError,
   WaitForTimeoutError
 } from "./core/errors.js";
 export { GatewayTransport } from "./core/GatewayTransport.js";
