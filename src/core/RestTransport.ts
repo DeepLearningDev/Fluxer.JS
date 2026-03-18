@@ -1,6 +1,7 @@
 import { createBotAuthHeader, fetchInstanceDiscoveryDocument, normalizeBaseUrl } from "./Discovery.js";
 import { BaseTransport } from "./Transport.js";
 import type {
+  FluxerInstanceDiscoveryDocument,
   FluxerRestTransportOptions,
   SendMessagePayload
 } from "./types.js";
@@ -10,6 +11,7 @@ export class RestTransport extends BaseTransport {
   readonly #instanceUrl?: string;
   readonly #auth?: FluxerRestTransportOptions["auth"];
   readonly #fetchImpl: typeof fetch;
+  readonly #discovery?: FluxerInstanceDiscoveryDocument;
   readonly #sendMessagePath: NonNullable<FluxerRestTransportOptions["sendMessagePath"]>;
   readonly #headers: Record<string, string>;
   readonly #userAgent?: string;
@@ -20,6 +22,7 @@ export class RestTransport extends BaseTransport {
     this.#instanceUrl = options.instanceUrl;
     this.#auth = options.auth;
     this.#fetchImpl = options.fetchImpl ?? fetch;
+    this.#discovery = options.discovery;
     this.#sendMessagePath = options.sendMessagePath ?? ((channelId) => `/channels/${channelId}/messages`);
     this.#headers = options.headers ?? {};
     this.#userAgent = options.userAgent;
@@ -106,7 +109,7 @@ export class RestTransport extends BaseTransport {
       return this.#baseUrl;
     }
 
-    const discovery = await fetchInstanceDiscoveryDocument({
+    const discovery = this.#discovery ?? await fetchInstanceDiscoveryDocument({
       instanceUrl: this.#instanceUrl,
       fetchImpl: this.#fetchImpl
     });

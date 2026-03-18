@@ -208,6 +208,9 @@ const transport = await createFluxerPlatformTransport({
   instanceUrl: "https://api.fluxer.app",
   auth: { token: process.env.FLUXER_TOKEN ?? "" },
   intents: 513,
+  onInstanceInfo: (instance) => {
+    console.log(instance.isSelfHosted, instance.apiCodeVersion, instance.capabilities);
+  },
   parseMessageEvent: defaultParseMessageEvent
 });
 
@@ -231,6 +234,7 @@ Current state is the SDK foundation layer:
 - Prefix commands now support schema-based args and flags with typed command input
 - `MockTransport` now captures outbound messages and powers a reusable `FluxerTestRuntime`
 - Client and command lifecycles now emit structured debug events with attachable console logging
+- Platform bootstrap now detects instance capabilities from discovery documents and surfaces self-hosted instance info
 
 This is still not a production framework. The biggest missing pieces are:
 

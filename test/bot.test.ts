@@ -10,7 +10,9 @@ import {
   createConsoleDebugHandler,
   shouldLogDebugEvent
 } from "../src/core/Diagnostics.js";
+import { createInstanceInfo, detectInstanceCapabilities } from "../src/core/Instance.js";
 import { defaultParseDispatchEvent } from "../src/core/createPlatformTransport.js";
+import { createFluxerPlatformTransport } from "../src/core/createPlatformTransport.js";
 import {
   CommandSchemaError,
   GatewayProtocolError,
@@ -363,6 +365,123 @@ test("formats console debug output", () => {
   assert.equal(lines.length, 1);
   assert.match(lines[0], /\[Fluxer\]\[command\]\[info\] command_finished/);
   assert.match(lines[0], /"commandName":"ping"/);
+});
+
+test("detects self-hosted instance capabilities from discovery", () => {
+  const discovery = {
+    api_code_version: 42,
+    endpoints: {
+      api: "https://fluxer.local/api",
+      api_client: "https://fluxer.local/client-api",
+      api_public: "https://fluxer.local/public-api",
+      gateway: "wss://fluxer.local/gateway",
+      media: "https://fluxer.local/media",
+      static_cdn: "https://fluxer.local/cdn",
+      marketing: "https://fluxer.local",
+      admin: "https://fluxer.local/admin",
+      invite: "https://fluxer.local/invite",
+      gift: "https://fluxer.local/gift",
+      webapp: "https://fluxer.local/app"
+    },
+    features: {
+      gateway_bot: true,
+      attachments: true
+    },
+    federation: {
+      enabled: true,
+      version: 2
+    }
+  } as const;
+
+  const capabilities = detectInstanceCapabilities(discovery);
+  const instanceInfo = createInstanceInfo({
+    instanceUrl: "https://fluxer.local",
+    discovery
+  });
+
+  assert.deepEqual(capabilities, {
+    federation: true,
+    invites: true,
+    media: true,
+    gateway: true,
+    gatewayBot: true,
+    botAuth: true,
+    attachments: true
+  });
+  assert.equal(instanceInfo.isSelfHosted, true);
+  assert.equal(instanceInfo.apiCodeVersion, 42);
+  assert.equal(instanceInfo.federationVersion, 2);
+});
+
+test("creates platform transport from provided discovery and reports instance info", async () => {
+  let fetchCalls = 0;
+  const debugEvents: string[] = [];
+  let receivedInstanceInfo: ReturnType<typeof createInstanceInfo> | undefined;
+
+  const discovery = {
+    api_code_version: 7,
+    endpoints: {
+      api: "https://fluxer.local/api",
+      api_client: "https://fluxer.local/client-api",
+      api_public: "https://fluxer.local/public-api",
+      gateway: "wss://fluxer.local/gateway",
+      media: "https://fluxer.local/media",
+      static_cdn: "https://fluxer.local/cdn",
+      marketing: "https://fluxer.local",
+      admin: "https://fluxer.local/admin",
+      invite: "https://fluxer.local/invite",
+      gift: "https://fluxer.local/gift",
+      webapp: "https://fluxer.local/app"
+    },
+    features: {
+      gateway_bot: true
+    }
+  } as const;
+
+  const gatewayInfo = {
+    url: "wss://fluxer.local/gateway/bot",
+    shards: 1,
+    session_start_limit: {
+      total: 1000,
+      remaining: 999,
+      reset_after: 1000,
+      max_concurrency: 1
+    }
+  };
+
+  const fetchImpl: typeof fetch = async (input) => {
+    fetchCalls += 1;
+    if (String(input).endsWith("/v1/gateway/bot")) {
+      return new Response(JSON.stringify(gatewayInfo), {
+        status: 200,
+        headers: {
+          "content-type": "application/json"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${String(input)}`);
+  };
+
+  const transport = await createFluxerPlatformTransport({
+    auth: { token: "bot-token" },
+    instanceUrl: "https://fluxer.local",
+    discovery,
+    fetchImpl,
+    debug: (event) => {
+      debugEvents.push(event.event);
+    },
+    onInstanceInfo: (instanceInfo) => {
+      receivedInstanceInfo = instanceInfo;
+    },
+    parseMessageEvent: () => null
+  });
+
+  assert.ok(transport);
+  assert.equal(fetchCalls, 1);
+  assert.equal(receivedInstanceInfo?.isSelfHosted, true);
+  assert.equal(receivedInstanceInfo?.apiCodeVersion, 7);
+  assert.ok(debugEvents.includes("instance_detected"));
 });
 
 test("test runtime builds fixtures and drives bot interactions deterministically", async () => {

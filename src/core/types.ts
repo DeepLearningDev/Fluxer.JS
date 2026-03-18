@@ -489,9 +489,32 @@ export interface FluxerInstanceDiscoveryDocument {
   };
 }
 
+export interface FluxerInstanceCapabilities {
+  federation: boolean;
+  invites: boolean;
+  media: boolean;
+  gateway: boolean;
+  gatewayBot: boolean;
+  botAuth: boolean;
+  attachments: boolean;
+}
+
+export interface FluxerInstanceInfo {
+  instanceUrl: string;
+  discoveryUrl: string;
+  apiBaseUrl: string;
+  gatewayBaseUrl?: string;
+  apiCodeVersion: number;
+  discovery: FluxerInstanceDiscoveryDocument;
+  capabilities: FluxerInstanceCapabilities;
+  isSelfHosted: boolean;
+  federationVersion?: number;
+}
+
 export interface FluxerRestTransportOptions {
   baseUrl?: string;
   instanceUrl?: string;
+  discovery?: FluxerInstanceDiscoveryDocument;
   auth?: FluxerAuth;
   fetchImpl?: typeof fetch;
   sendMessagePath?: (channelId: string) => string;
@@ -543,6 +566,7 @@ export interface FluxerGatewayDispatchEvent<T = unknown> {
 
 export interface FluxerClientLike {
   isConnected(): boolean;
+  emitDebug?(event: Omit<FluxerDebugEvent, "timestamp"> & { timestamp?: string }): void;
   sendMessage(
     channelId: string,
     message: string | Omit<SendMessagePayload, "channelId"> | MessageBuilderLike

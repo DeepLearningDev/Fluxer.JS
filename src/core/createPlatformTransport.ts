@@ -1,5 +1,6 @@
 import { fetchGatewayInformation, fetchInstanceDiscoveryDocument } from "./Discovery.js";
 import { GatewayTransport } from "./GatewayTransport.js";
+import { createInstanceInfo } from "./Instance.js";
 import { PlatformTransport } from "./PlatformTransport.js";
 import { RestTransport } from "./RestTransport.js";
 import type {
@@ -7,6 +8,8 @@ import type {
   FluxerDebugHandler,
   FluxerGatewayDispatchEvent,
   FluxerGatewayEnvelope,
+  FluxerInstanceDiscoveryDocument,
+  FluxerInstanceInfo,
   FluxerGatewayTransportOptions,
   FluxerMessage,
   FluxerTransport
@@ -15,11 +18,13 @@ import type {
 export interface CreateFluxerPlatformTransportOptions {
   auth: FluxerAuth;
   instanceUrl?: string;
+  discovery?: FluxerInstanceDiscoveryDocument;
   fetchImpl?: typeof fetch;
   userAgent?: string;
   protocols?: string | string[];
   identifyPayload?: unknown;
   debug?: FluxerDebugHandler;
+  onInstanceInfo?: (instance: FluxerInstanceInfo) => void;
   intents?: number;
   shard?: [number, number];
   properties?: Record<string, string>;
@@ -31,13 +36,34 @@ export interface CreateFluxerPlatformTransportOptions {
 export async function createFluxerPlatformTransport(
   options: CreateFluxerPlatformTransportOptions
 ): Promise<FluxerTransport> {
-  const discovery = await fetchInstanceDiscoveryDocument({
+  const discovery = options.discovery ?? await fetchInstanceDiscoveryDocument({
     instanceUrl: options.instanceUrl,
     fetchImpl: options.fetchImpl
   });
+  const instanceInfo = createInstanceInfo({
+    instanceUrl: options.instanceUrl ?? discovery.endpoints.api,
+    discovery
+  });
+  options.onInstanceInfo?.(instanceInfo);
+  options.debug?.({
+    scope: "transport",
+    event: "instance_detected",
+    level: "info",
+    timestamp: new Date().toISOString(),
+    data: {
+      instanceUrl: instanceInfo.instanceUrl,
+      apiBaseUrl: instanceInfo.apiBaseUrl,
+      apiCodeVersion: instanceInfo.apiCodeVersion,
+      isSelfHosted: instanceInfo.isSelfHosted,
+      capabilities: Object.entries(instanceInfo.capabilities)
+        .filter(([, enabled]) => enabled)
+        .map(([name]) => name)
+        .join(",")
+    }
+  });
 
   const gateway = await fetchGatewayInformation({
-    apiBaseUrl: discovery.endpoints.api,
+    apiBaseUrl: instanceInfo.apiBaseUrl,
     auth: options.auth,
     fetchImpl: options.fetchImpl,
     userAgent: options.userAgent
@@ -46,7 +72,7 @@ export async function createFluxerPlatformTransport(
   return new PlatformTransport({
     inbound: new GatewayTransport({
       url: gateway.url,
-      apiBaseUrl: discovery.endpoints.api,
+      apiBaseUrl: instanceInfo.apiBaseUrl,
       auth: options.auth,
       fetchImpl: options.fetchImpl,
       protocols: options.protocols,
@@ -81,7 +107,8 @@ export async function createFluxerPlatformTransport(
       parseMessageEvent: options.parseMessageEvent
     }),
     outbound: new RestTransport({
-      baseUrl: discovery.endpoints.api,
+      baseUrl: instanceInfo.apiBaseUrl,
+      discovery,
       auth: options.auth,
       fetchImpl: options.fetchImpl,
       userAgent: options.userAgent

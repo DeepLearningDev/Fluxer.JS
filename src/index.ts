@@ -27,6 +27,10 @@ export {
   resolveDiscoveryUrl
 } from "./core/Discovery.js";
 export {
+  createInstanceInfo,
+  detectInstanceCapabilities
+} from "./core/Instance.js";
+export {
   CommandSchemaError,
   FluxerError,
   GatewayProtocolError,
@@ -94,6 +98,8 @@ export type {
   FluxerGuild,
   FluxerGuildMember,
   FluxerInstanceDiscoveryDocument,
+  FluxerInstanceCapabilities,
+  FluxerInstanceInfo,
   FluxerInvite,
   FluxerModule,
   FluxerMessageReference,
