@@ -5,6 +5,11 @@ import { EmbedBuilder, MessageBuilder, resolveMessagePayload } from "../src/core
 import { parseCommandInput } from "../src/core/CommandParser.js";
 import { defineCommand, parseCommandSchemaInput } from "../src/core/CommandSchema.js";
 import { FluxerClient } from "../src/core/Client.js";
+import {
+  attachDebugHandler,
+  createConsoleDebugHandler,
+  shouldLogDebugEvent
+} from "../src/core/Diagnostics.js";
 import { defaultParseDispatchEvent } from "../src/core/createPlatformTransport.js";
 import {
   CommandSchemaError,
@@ -262,11 +267,102 @@ test("mock transport captures sends and emits injected runtime events", async ()
       content: "pong"
     }
   ]);
-  assert.deepEqual(events, [
-    "state:ready",
-    "session:session_1:2",
-    "debug:test_event"
-  ]);
+  assert.ok(events.includes("state:ready"));
+  assert.ok(events.includes("session:session_1:2"));
+  assert.ok(events.includes("debug:test_event"));
+});
+
+test("emits structured debug events for client and command lifecycles", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const bot = new FluxerBot({
+    name: "DebugBot",
+    prefix: "!"
+  });
+  const events: string[] = [];
+
+  attachDebugHandler(client, (event) => {
+    events.push(`${event.scope}:${event.event}:${event.level ?? "debug"}`);
+  });
+
+  bot.command({
+    name: "ping",
+    execute: async ({ reply }) => {
+      await reply("pong");
+    }
+  });
+
+  client.registerBot(bot);
+  await client.connect();
+  await transport.injectMessage(createMessage("!ping"));
+  await client.disconnect();
+
+  assert.ok(events.includes("client:bot_registered:info"));
+  assert.ok(events.includes("client:connect_started:info"));
+  assert.ok(events.includes("client:send_message_started:debug"));
+  assert.ok(events.includes("command:command_started:info"));
+  assert.ok(events.includes("command:command_finished:info"));
+  assert.ok(events.includes("client:disconnect_succeeded:info"));
+});
+
+test("filters debug events by level", () => {
+  assert.equal(
+    shouldLogDebugEvent(
+      {
+        scope: "client",
+        event: "send_message_started",
+        level: "debug",
+        timestamp: new Date().toISOString()
+      },
+      "info"
+    ),
+    false
+  );
+
+  assert.equal(
+    shouldLogDebugEvent(
+      {
+        scope: "command",
+        event: "command_failed",
+        level: "error",
+        timestamp: new Date().toISOString()
+      },
+      "info"
+    ),
+    true
+  );
+});
+
+test("formats console debug output", () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (message?: unknown) => {
+    lines.push(String(message));
+  };
+
+  try {
+    const handler = createConsoleDebugHandler({
+      minLevel: "debug",
+      includeData: true
+    });
+
+    handler({
+      scope: "command",
+      event: "command_finished",
+      level: "info",
+      timestamp: new Date().toISOString(),
+      data: {
+        commandName: "ping",
+        durationMs: 1
+      }
+    });
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /\[Fluxer\]\[command\]\[info\] command_finished/);
+  assert.match(lines[0], /"commandName":"ping"/);
 });
 
 test("test runtime builds fixtures and drives bot interactions deterministically", async () => {

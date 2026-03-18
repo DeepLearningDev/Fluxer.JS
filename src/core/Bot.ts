@@ -46,6 +46,14 @@ export class FluxerBot {
 
   public attach(client: FluxerClient): void {
     this.#client = client;
+    this.#emitDebug({
+      scope: "command",
+      event: "bot_attached",
+      level: "info",
+      data: {
+        botName: this.name
+      }
+    });
   }
 
   public command<TSchema extends FluxerCommandSchema | undefined>(
@@ -194,6 +202,15 @@ export class FluxerBot {
     const { commandName, args } = parsedInput;
     const command = this.#commands.get(this.#normalizeCommandKey(commandName));
     if (!command) {
+      this.#emitDebug({
+        scope: "command",
+        event: "command_not_found",
+        level: "debug",
+        data: {
+          botName: this.name,
+          commandName
+        }
+      });
       await this.#runHook("commandNotFound", {
         client: this.#client,
         bot: this,
@@ -229,6 +246,16 @@ export class FluxerBot {
         });
       } catch (error) {
         const normalizedError = this.#normalizeSchemaError(error, command);
+        this.#emitDebug({
+          scope: "command",
+          event: "command_invalid",
+          level: "warn",
+          data: {
+            botName: this.name,
+            commandName: command.name,
+            message: normalizedError.message
+          }
+        });
         await this.#runHook("commandInvalid", {
           command,
           commandContext: context,
@@ -241,6 +268,16 @@ export class FluxerBot {
 
     const blockedResult = await this.#runGuards(context, command);
     if (blockedResult) {
+      this.#emitDebug({
+        scope: "command",
+        event: "command_blocked",
+        level: "warn",
+        data: {
+          botName: this.name,
+          commandName: command.name,
+          reason: blockedResult.reason
+        }
+      });
       await this.#runHook("commandBlocked", {
         command,
         commandContext: context,
@@ -255,12 +292,43 @@ export class FluxerBot {
     }
 
     try {
+      const startedAt = Date.now();
+      this.#emitDebug({
+        scope: "command",
+        event: "command_started",
+        level: "info",
+        data: {
+          botName: this.name,
+          commandName: command.name,
+          argCount: args.length
+        }
+      });
       await this.#runHook("beforeCommand", context);
       await this.#runMiddleware(context, command);
       await this.#runHook("afterCommand", context);
+      this.#emitDebug({
+        scope: "command",
+        event: "command_finished",
+        level: "info",
+        data: {
+          botName: this.name,
+          commandName: command.name,
+          durationMs: Date.now() - startedAt
+        }
+      });
       this.#client.emit("commandExecuted", { commandName, message });
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error("Command execution failed.");
+      this.#emitDebug({
+        scope: "command",
+        event: "command_failed",
+        level: "error",
+        data: {
+          botName: this.name,
+          commandName: command.name,
+          message: normalizedError.message
+        }
+      });
       await this.#runHook("commandError", {
         command,
         commandContext: context,
@@ -381,5 +449,14 @@ export class FluxerBot {
 
   #isPromiseLike(value: unknown): value is Promise<unknown> {
     return typeof value === "object" && value !== null && "then" in value;
+  }
+
+  #emitDebug(event: {
+    scope: "command";
+    event: string;
+    level?: "debug" | "info" | "warn" | "error";
+    data?: Record<string, unknown>;
+  }): void {
+    this.#client?.emitDebug(event);
   }
 }

@@ -31,6 +31,8 @@ import {
   FluxerBot,
   FluxerClient,
   MessageBuilder,
+  attachDebugHandler,
+  createConsoleDebugHandler,
   createEssentialsPlugin,
   createPermissionGuard,
   defineCommand
@@ -47,6 +49,13 @@ const bot = new FluxerBot({
     }
   }
 });
+
+attachDebugHandler(
+  client,
+  createConsoleDebugHandler({
+    minLevel: "info"
+  })
+);
 
 bot.guard(({ message }) => message.channel.type !== "dm" || "DMs are disabled.");
 
@@ -221,6 +230,7 @@ Current state is the SDK foundation layer:
 - Gateway runtime now exposes state/session transitions, typed protocol errors, and structured debug hooks
 - Prefix commands now support schema-based args and flags with typed command input
 - `MockTransport` now captures outbound messages and powers a reusable `FluxerTestRuntime`
+- Client and command lifecycles now emit structured debug events with attachable console logging
 
 This is still not a production framework. The biggest missing pieces are:
 

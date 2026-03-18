@@ -452,6 +452,7 @@ export interface FluxerDebugEvent {
   scope: "gateway" | "transport" | "client" | "command";
   event: string;
   timestamp: string;
+  level?: "debug" | "info" | "warn" | "error";
   data?: Record<string, unknown>;
 }
 

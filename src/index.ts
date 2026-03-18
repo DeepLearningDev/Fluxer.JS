@@ -11,6 +11,12 @@ export {
   parseCommandSchemaInput
 } from "./core/CommandSchema.js";
 export {
+  attachDebugHandler,
+  createConsoleDebugHandler,
+  shouldLogDebugEvent
+} from "./core/Diagnostics.js";
+export type { FluxerConsoleDebugOptions } from "./core/Diagnostics.js";
+export {
   parseCommandInput,
   tokenizeCommandInput
 } from "./core/CommandParser.js";

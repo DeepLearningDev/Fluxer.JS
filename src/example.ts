@@ -2,6 +2,7 @@ import { FluxerBot } from "./core/Bot.js";
 import { EmbedBuilder, MessageBuilder } from "./core/builders.js";
 import { defineCommand } from "./core/CommandSchema.js";
 import { FluxerClient } from "./core/Client.js";
+import { attachDebugHandler, createConsoleDebugHandler } from "./core/Diagnostics.js";
 import { MockTransport } from "./core/MockTransport.js";
 import { createPermissionGuard } from "./core/Permissions.js";
 import type { CommandContext, FluxerModule } from "./core/types.js";
@@ -9,6 +10,12 @@ import { createEssentialsPlugin } from "./plugins/essentials.js";
 
 const transport = new MockTransport();
 const client = new FluxerClient(transport);
+attachDebugHandler(
+  client,
+  createConsoleDebugHandler({
+    minLevel: "info"
+  })
+);
 
 const bot = new FluxerBot({
   name: "StarterBot",

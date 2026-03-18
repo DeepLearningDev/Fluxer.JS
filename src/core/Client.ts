@@ -3,6 +3,7 @@ import { resolveMessagePayload } from "./builders.js";
 import type { FluxerBot } from "./Bot.js";
 import type {
   FluxerChannel,
+  FluxerDebugEvent,
   FluxerEventMap,
   FluxerGatewayDispatchEvent,
   FluxerGuild,
@@ -53,14 +54,47 @@ export class FluxerClient extends EventEmitter {
   }
 
   public async connect(): Promise<void> {
-    await this.#transport.connect();
-    this.#connected = true;
-    this.emit("ready", { connectedAt: new Date() } satisfies FluxerEventMap["ready"]);
+    this.emitDebug({
+      scope: "client",
+      event: "connect_started",
+      level: "info"
+    });
+    try {
+      await this.#transport.connect();
+      this.#connected = true;
+      this.emitDebug({
+        scope: "client",
+        event: "connect_succeeded",
+        level: "info"
+      });
+      this.emit("ready", { connectedAt: new Date() } satisfies FluxerEventMap["ready"]);
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Client connect failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "connect_failed",
+        level: "error",
+        data: {
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
   }
 
   public async disconnect(): Promise<void> {
+    this.emitDebug({
+      scope: "client",
+      event: "disconnect_started",
+      level: "info"
+    });
     await this.#transport.disconnect();
     this.#connected = false;
+    this.emitDebug({
+      scope: "client",
+      event: "disconnect_succeeded",
+      level: "info"
+    });
   }
 
   public isConnected(): boolean {
@@ -70,19 +104,71 @@ export class FluxerClient extends EventEmitter {
   public registerBot(bot: FluxerBot): void {
     this.#bots.add(bot);
     bot.attach(this);
+    this.emitDebug({
+      scope: "client",
+      event: "bot_registered",
+      level: "info",
+      data: {
+        name: bot.name
+      }
+    });
   }
 
   public async sendMessage(
     channelId: string,
     message: string | Omit<SendMessagePayload, "channelId"> | MessageBuilderLike
   ): Promise<void> {
-    await this.#transport.sendMessage({
+    const payload = {
       channelId,
       ...resolveMessagePayload(message)
+    };
+    this.emitDebug({
+      scope: "client",
+      event: "send_message_started",
+      level: "debug",
+      data: {
+        channelId,
+        hasContent: typeof payload.content === "string" && payload.content.length > 0,
+        embedCount: payload.embeds?.length ?? 0
+      }
     });
+
+    try {
+      await this.#transport.sendMessage(payload);
+      this.emitDebug({
+        scope: "client",
+        event: "send_message_succeeded",
+        level: "debug",
+        data: {
+          channelId
+        }
+      });
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Send message failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "send_message_failed",
+        level: "error",
+        data: {
+          channelId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
   }
 
   public async receiveMessage(message: FluxerMessage): Promise<void> {
+    this.emitDebug({
+      scope: "client",
+      event: "message_received",
+      level: "debug",
+      data: {
+        id: message.id,
+        authorId: message.author.id,
+        channelId: message.channel.id
+      }
+    });
     this.emit("messageCreate", message);
 
     for (const bot of this.#bots) {
@@ -91,6 +177,15 @@ export class FluxerClient extends EventEmitter {
   }
 
   public async receiveGatewayDispatch(event: FluxerGatewayDispatchEvent): Promise<void> {
+    this.emitDebug({
+      scope: "client",
+      event: "gateway_dispatch_received",
+      level: "debug",
+      data: {
+        type: event.type,
+        sequence: event.sequence
+      }
+    });
     this.emit("gatewayDispatch", event);
 
     switch (event.type) {
@@ -275,6 +370,13 @@ export class FluxerClient extends EventEmitter {
 
   public override emit<E extends EventKey>(eventName: E, payload: FluxerEventMap[E]): boolean {
     return super.emit(eventName, payload);
+  }
+
+  public emitDebug(event: Omit<FluxerDebugEvent, "timestamp"> & { timestamp?: string }): void {
+    this.emit("debug", {
+      ...event,
+      timestamp: event.timestamp ?? new Date().toISOString()
+    });
   }
 
   #parseGatewayMessage(event: FluxerGatewayDispatchEvent): FluxerMessage | null {
