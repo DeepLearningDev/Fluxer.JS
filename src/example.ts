@@ -139,8 +139,13 @@ const utilityModule: FluxerModule = {
                 .setTitle("Heartbeat")
                 .setDescription("StarterBot is online.")
                 .setAttachmentThumbnail("status.png")
-                .addField({ name: "Command", value: "ping", inline: true })
-                .setColor(0x2f855a)
+                .setColorHex("#2f855a")
+                .setTimestampNow()
+                .addInlineField("Command", "ping")
+                .addFieldsFromRecord({
+                  Framework: "Fluxer.JS",
+                  Healthy: true
+                })
             )
             .addAttachment(
               new AttachmentBuilder()
@@ -154,8 +159,11 @@ const utilityModule: FluxerModule = {
             )
             .addAttachment(
               new AttachmentBuilder()
-                .setFilename("status.txt")
-                .setText("StarterBot heartbeat: ok")
+                .setFilename("status.json")
+                .setJson({
+                  status: "ok",
+                  framework: "Fluxer.JS"
+                }, 2)
             )
         );
         state.lastCommand = "ping";

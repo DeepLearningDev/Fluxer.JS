@@ -32,6 +32,8 @@ import {
   FluxerBot,
   FluxerClient,
   MessageBuilder,
+  createEmbedTemplate,
+  serializeMessagePayload,
   attachDebugHandler,
   createConsoleDebugHandler,
   createEssentialsPlugin,
@@ -81,13 +83,21 @@ const utilityModule: FluxerModule = {
               new EmbedBuilder()
                 .setTitle("Heartbeat")
                 .setDescription("Bot is online.")
+                .setColorHex("#2f855a")
+                .setTimestampNow()
                 .setAttachmentThumbnail("status.png")
+                .addInlineField("Command", "ping")
             )
             .addAttachment(
               new AttachmentBuilder()
                 .setFilename("status.png")
                 .setContentType("image/png")
                 .setData(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
+            )
+            .addAttachment(
+              new AttachmentBuilder()
+                .setFilename("status.json")
+                .setJson({ healthy: true }, 2)
             )
         );
         state.lastCommand = "ping";
@@ -186,9 +196,38 @@ Rich messages are now builder-driven:
 - `MessageBuilder` composes outbound payloads
 - `EmbedBuilder` handles typed embed construction
 - `AttachmentBuilder` composes file attachments and supports `attachment://filename` embed references
-- `createMessageTemplate(...)` lets bots reuse validated payload templates
+- `EmbedBuilder` now supports convenience methods like `setColorHex(...)`, `setTimestampNow()`, `addInlineField(...)`, and `addFieldsFromRecord(...)`
+- `AttachmentBuilder#setJson(...)` helps generate structured file payloads without manual serialization
+- `createEmbedTemplate(...)` and `createMessageTemplate(...)` let bots reuse validated payload templates
+- `serializeMessagePayload(...)` exposes the exact JSON-safe payload shape used by the REST serializer
 - `validateMessagePayload(...)` enforces safe defaults before the transport sends malformed payloads
 - `client.sendMessage(...)` and `context.reply(...)` accept either strings or rich payloads
+
+Serializer preview example:
+
+```ts
+const baseEmbed = createEmbedTemplate(
+  new EmbedBuilder()
+    .setTitle("Status")
+    .setColorHex("#4f46e5")
+    .addInlineField("Shard", "0")
+);
+
+const payload = serializeMessagePayload(
+  new MessageBuilder()
+    .setContent("Deployment complete")
+    .addEmbed(baseEmbed(new EmbedBuilder().setDescription("All services healthy.")))
+    .addAttachment(
+      new AttachmentBuilder()
+        .setFilename("deploy.json")
+        .setJson({ ok: true }, 2)
+    )
+);
+
+console.log(payload);
+```
+
+Detailed payload-builder docs and serializer examples live in [docs/PayloadBuilders.md](./docs/PayloadBuilders.md).
 
 Plugins now sit above modules:
 

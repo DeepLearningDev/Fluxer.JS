@@ -7,6 +7,7 @@ import type {
   FluxerEmbedField,
   FluxerEmbedFooter,
   FluxerEmbedImage,
+  FluxerSerializedMessagePayload,
   MessageBuilderLike,
   SendMessagePayload
 } from "./types.js";
@@ -46,6 +47,12 @@ export class AttachmentBuilder {
   public setText(text: string, contentType = "text/plain; charset=utf-8"): this {
     this.#attachment.data = text;
     this.#attachment.contentType = contentType;
+    return this;
+  }
+
+  public setJson(value: unknown, spacing?: number): this {
+    this.#attachment.data = JSON.stringify(value, null, spacing);
+    this.#attachment.contentType = "application/json; charset=utf-8";
     return this;
   }
 
@@ -98,9 +105,28 @@ export class EmbedBuilder {
     return this;
   }
 
+  public setColorHex(color: `#${string}` | string): this {
+    const normalized = color.startsWith("#") ? color.slice(1) : color;
+    const parsedColor = Number.parseInt(normalized, 16);
+    if (!Number.isFinite(parsedColor)) {
+      throw new PayloadValidationError(`Invalid hex color "${color}".`, {
+        code: "PAYLOAD_EMBED_COLOR_INVALID",
+        details: {
+          color
+        }
+      });
+    }
+
+    return this.setColor(parsedColor);
+  }
+
   public setTimestamp(timestamp: Date | string = new Date()): this {
     this.#embed.timestamp = timestamp instanceof Date ? timestamp.toISOString() : timestamp;
     return this;
+  }
+
+  public setTimestampNow(): this {
+    return this.setTimestamp(new Date());
   }
 
   public setFooter(footer: FluxerEmbedFooter | string, iconUrl?: string): this {
@@ -137,9 +163,28 @@ export class EmbedBuilder {
     return this;
   }
 
+  public addInlineField(name: string, value: string): this {
+    return this.addField({ name, value, inline: true });
+  }
+
   public addFields(fields: FluxerEmbedField[]): this {
     for (const field of fields) {
       this.addField(field);
+    }
+
+    return this;
+  }
+
+  public addFieldsFromRecord(
+    fields: Record<string, string | number | boolean>,
+    options?: { inline?: boolean }
+  ): this {
+    for (const [name, value] of Object.entries(fields)) {
+      this.addField({
+        name,
+        value: String(value),
+        inline: options?.inline
+      });
     }
 
     return this;
@@ -207,6 +252,29 @@ export class MessageBuilder {
 
 export function createAttachmentUrl(filename: string): string {
   return `${ATTACHMENT_URL_PREFIX}${filename}`;
+}
+
+export function createEmbedTemplate(
+  template: FluxerEmbed | EmbedBuilder
+): (override?: FluxerEmbed | EmbedBuilder) => FluxerEmbed {
+  const baseEmbed = template instanceof EmbedBuilder ? template.toJSON() : cloneEmbed(template);
+
+  return (override) => {
+    if (!override) {
+      return cloneEmbed(baseEmbed);
+    }
+
+    const overrideEmbed = override instanceof EmbedBuilder ? override.toJSON() : cloneEmbed(override);
+    return {
+      ...baseEmbed,
+      ...overrideEmbed,
+      footer: overrideEmbed.footer ?? baseEmbed.footer,
+      author: overrideEmbed.author ?? baseEmbed.author,
+      image: overrideEmbed.image ?? baseEmbed.image,
+      thumbnail: overrideEmbed.thumbnail ?? baseEmbed.thumbnail,
+      fields: overrideEmbed.fields ?? baseEmbed.fields?.map((field) => ({ ...field }))
+    };
+  };
 }
 
 export function validateMessagePayload(
@@ -286,6 +354,66 @@ export function resolveMessagePayload(
   const payload = clonePayload(message as Omit<SendMessagePayload, "channelId">);
   validateMessagePayload(payload);
   return payload;
+}
+
+export function serializeMessagePayload(
+  payload: Omit<SendMessagePayload, "channelId"> | SendMessagePayload
+): FluxerSerializedMessagePayload {
+  const resolvedPayload = clonePayload(payload);
+  validateMessagePayload(resolvedPayload);
+
+  return {
+    content: resolvedPayload.content,
+    embeds: resolvedPayload.embeds?.map((embed) => ({
+      title: embed.title,
+      description: embed.description,
+      url: embed.url,
+      color: embed.color,
+      timestamp: embed.timestamp,
+      footer: embed.footer
+        ? {
+            text: embed.footer.text,
+            icon_url: embed.footer.iconUrl
+          }
+        : undefined,
+      author: embed.author
+        ? {
+            name: embed.author.name,
+            url: embed.author.url,
+            icon_url: embed.author.iconUrl
+          }
+        : undefined,
+      image: embed.image
+        ? {
+            url: embed.image.url
+          }
+        : undefined,
+      thumbnail: embed.thumbnail
+        ? {
+            url: embed.thumbnail.url
+          }
+        : undefined,
+      fields: embed.fields?.map((field) => ({
+        name: field.name,
+        value: field.value,
+        inline: field.inline
+      }))
+    })),
+    attachments: resolvedPayload.attachments?.map((attachment, index) => ({
+      id: index,
+      filename: attachment.spoiler ? toSpoilerFilename(attachment.filename) : attachment.filename,
+      description: attachment.description
+    })),
+    nonce: resolvedPayload.nonce,
+    message_reference: resolvedPayload.messageReference
+      ? {
+          message_id: resolvedPayload.messageReference.messageId,
+          channel_id: resolvedPayload.messageReference.channelId,
+          guild_id: resolvedPayload.messageReference.guildId,
+          type: resolvedPayload.messageReference.type
+        }
+      : undefined
+  };
 }
 
 export function clonePayload(
@@ -397,6 +525,10 @@ function hasEmbedAttachmentExtension(filename: string): boolean {
   }
 
   return false;
+}
+
+function toSpoilerFilename(filename: string): string {
+  return filename.startsWith("SPOILER_") ? filename : `SPOILER_${filename}`;
 }
 
 function cloneEmbed(embed: FluxerEmbed): FluxerEmbed {

@@ -1,11 +1,12 @@
 import { createBotAuthHeader, fetchInstanceDiscoveryDocument, normalizeBaseUrl } from "./Discovery.js";
-import { validateMessagePayload } from "./builders.js";
+import { serializeMessagePayload, validateMessagePayload } from "./builders.js";
 import { RestTransportError } from "./errors.js";
 import { BaseTransport } from "./Transport.js";
 import type {
   FluxerAttachment,
   FluxerInstanceDiscoveryDocument,
   FluxerRestTransportOptions,
+  FluxerSerializedMessagePayload,
   SendMessagePayload
 } from "./types.js";
 
@@ -154,60 +155,9 @@ async function safeReadResponseText(response: Response): Promise<string | undefi
   }
 }
 
-function serializeMessagePayload(payload: SendMessagePayload): Record<string, unknown> {
-  return {
-    content: payload.content,
-    embeds: payload.embeds?.map((embed) => ({
-      ...embed,
-      footer: embed.footer
-        ? {
-            text: embed.footer.text,
-            icon_url: embed.footer.iconUrl
-          }
-        : undefined,
-      author: embed.author
-        ? {
-            name: embed.author.name,
-            url: embed.author.url,
-            icon_url: embed.author.iconUrl
-          }
-        : undefined,
-      image: embed.image
-        ? {
-            url: embed.image.url
-          }
-        : undefined,
-      thumbnail: embed.thumbnail
-        ? {
-            url: embed.thumbnail.url
-          }
-        : undefined,
-      fields: embed.fields?.map((field) => ({
-        name: field.name,
-        value: field.value,
-        inline: field.inline
-      }))
-    })),
-    attachments: payload.attachments?.map((attachment, index) => ({
-      id: index,
-      filename: attachment.spoiler ? toSpoilerFilename(attachment.filename) : attachment.filename,
-      description: attachment.description
-    })),
-    nonce: payload.nonce,
-    message_reference: payload.messageReference
-      ? {
-          message_id: payload.messageReference.messageId,
-          channel_id: payload.messageReference.channelId,
-          guild_id: payload.messageReference.guildId,
-          type: payload.messageReference.type
-        }
-      : undefined
-  };
-}
-
 function createMultipartRequestBody(
   payload: SendMessagePayload,
-  serializedPayload: Record<string, unknown>
+  serializedPayload: FluxerSerializedMessagePayload
 ): FormData {
   const formData = new FormData();
   formData.set("payload_json", JSON.stringify(serializedPayload));

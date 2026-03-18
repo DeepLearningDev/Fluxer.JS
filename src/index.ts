@@ -4,7 +4,9 @@ export {
   EmbedBuilder,
   MessageBuilder,
   createAttachmentUrl,
+  createEmbedTemplate,
   createMessageTemplate,
+  serializeMessagePayload,
   validateMessagePayload,
   resolveMessagePayload
 } from "./core/builders.js";
@@ -150,6 +152,9 @@ export type {
   FluxerReconnectOptions,
   FluxerRestTransportOptions,
   FluxerRole,
+  FluxerSerializedAttachment,
+  FluxerSerializedEmbed,
+  FluxerSerializedMessagePayload,
   FluxerTransport,
   FluxerTypingStartEvent,
   MessageBuilderLike,

@@ -124,6 +124,12 @@ export interface FluxerAttachment {
   spoiler?: boolean;
 }
 
+export interface FluxerSerializedAttachment {
+  id: number;
+  filename: string;
+  description?: string;
+}
+
 export interface FluxerEmbedField {
   name: string;
   value: string;
@@ -158,6 +164,30 @@ export interface FluxerEmbed {
   fields?: FluxerEmbedField[];
 }
 
+export interface FluxerSerializedEmbed {
+  title?: string;
+  description?: string;
+  url?: string;
+  color?: number;
+  timestamp?: string;
+  footer?: {
+    text: string;
+    icon_url?: string;
+  };
+  author?: {
+    name: string;
+    url?: string;
+    icon_url?: string;
+  };
+  image?: {
+    url: string;
+  };
+  thumbnail?: {
+    url: string;
+  };
+  fields?: FluxerEmbedField[];
+}
+
 export interface SendMessagePayload {
   channelId: string;
   content?: string;
@@ -165,6 +195,19 @@ export interface SendMessagePayload {
   attachments?: FluxerAttachment[];
   nonce?: string;
   messageReference?: FluxerMessageReference;
+}
+
+export interface FluxerSerializedMessagePayload {
+  content?: string;
+  embeds?: FluxerSerializedEmbed[];
+  attachments?: FluxerSerializedAttachment[];
+  nonce?: string;
+  message_reference?: {
+    message_id: string;
+    channel_id?: string;
+    guild_id?: string;
+    type?: number;
+  };
 }
 
 export interface FluxerAuth {
