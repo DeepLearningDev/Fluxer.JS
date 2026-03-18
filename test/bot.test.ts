@@ -3,9 +3,14 @@ import assert from "node:assert/strict";
 import { FluxerBot } from "../src/core/Bot.js";
 import { EmbedBuilder, MessageBuilder, resolveMessagePayload } from "../src/core/builders.js";
 import { parseCommandInput } from "../src/core/CommandParser.js";
+import { defineCommand, parseCommandSchemaInput } from "../src/core/CommandSchema.js";
 import { FluxerClient } from "../src/core/Client.js";
 import { defaultParseDispatchEvent } from "../src/core/createPlatformTransport.js";
-import { GatewayProtocolError, GatewayTransportError } from "../src/core/errors.js";
+import {
+  CommandSchemaError,
+  GatewayProtocolError,
+  GatewayTransportError
+} from "../src/core/errors.js";
 import { GatewayTransport } from "../src/core/GatewayTransport.js";
 import { MockTransport } from "../src/core/MockTransport.js";
 import { createPermissionGuard } from "../src/core/Permissions.js";
@@ -213,6 +218,120 @@ test("parses quoted command arguments", () => {
     commandName: "say",
     args: ["hello world", "test"]
   });
+});
+
+test("parses schema-based command args and flags", () => {
+  const schema = {
+    args: [
+      { name: "target", required: true },
+      { name: "amount", type: "number", required: true },
+      { name: "reason", rest: true }
+    ],
+    flags: [
+      { name: "silent", short: "s" },
+      { name: "timeout", short: "t", type: "number" },
+      { name: "tag", type: "string", multiple: true }
+    ],
+    allowUnknownFlags: false
+  } as const;
+
+  const parsed = parseCommandSchemaInput(
+    ["user_2", "7", "rule", "violation", "--silent", "--timeout=30", "--tag", "spam", "--tag", "urgent"],
+    schema,
+    { prefix: "!", commandName: "ban" }
+  );
+
+  assert.deepEqual(parsed, {
+    args: {
+      target: "user_2",
+      amount: 7,
+      reason: ["rule", "violation"]
+    },
+    flags: {
+      silent: true,
+      timeout: 30,
+      tag: ["spam", "urgent"]
+    },
+    rawArgs: [
+      "user_2",
+      "7",
+      "rule",
+      "violation",
+      "--silent",
+      "--timeout=30",
+      "--tag",
+      "spam",
+      "--tag",
+      "urgent"
+    ],
+    unknownFlags: []
+  });
+});
+
+test("replies with schema validation errors and exposes typed parsed input", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const replies: Array<Omit<SendMessagePayload, "channelId">> = [];
+  const invalidErrors: Error[] = [];
+  const executions: string[] = [];
+
+  client.sendMessage = async (_channelId, message) => {
+    if (typeof message === "string") {
+      replies.push({ content: message });
+      return;
+    }
+
+    if ("toJSON" in message && typeof message.toJSON === "function") {
+      replies.push(message.toJSON());
+      return;
+    }
+
+    replies.push(message as Omit<SendMessagePayload, "channelId">);
+  };
+
+  const bot = new FluxerBot({
+    name: "SchemaBot",
+    prefix: "!",
+    hooks: {
+      commandInvalid: ({ error }) => {
+        invalidErrors.push(error);
+      }
+    }
+  });
+
+  bot.command(
+    defineCommand({
+      name: "ban",
+      schema: {
+        args: [
+          { name: "target", required: true },
+          { name: "days", type: "number", required: true }
+        ],
+        flags: [
+          { name: "silent", short: "s" }
+        ],
+        allowUnknownFlags: false
+      },
+      execute: async ({ input }) => {
+        executions.push(
+          `${input.args.target}:${input.args.days}:${input.flags.silent}`
+        );
+      }
+    })
+  );
+
+  client.registerBot(bot);
+  await client.connect();
+  await transport.injectMessage(createMessage("!ban user_2 3 --silent"));
+  await transport.injectMessage(createMessage("!ban user_2 nope"));
+
+  assert.deepEqual(executions, ["user_2:3:true"]);
+  assert.equal(invalidErrors.length, 1);
+  assert.ok(invalidErrors[0] instanceof CommandSchemaError);
+  assert.equal(
+    replies[0]?.content,
+    'Invalid number for argument "days".\nUsage: !ban <target> <days> [-s, --silent]'
+  );
 });
 
 test("matches commands case-insensitively by default", async () => {

@@ -168,12 +168,94 @@ export interface FluxerMessageReference {
   type?: number;
 }
 
-export interface CommandContext {
+export type FluxerCommandValueType = "string" | "number" | "boolean";
+
+type FluxerResolvedCommandValue<TType extends FluxerCommandValueType | undefined> =
+  TType extends "number" ? number
+  : TType extends "boolean" ? boolean
+  : string;
+
+type FluxerCommandArgumentResult<
+  TDefinition extends FluxerCommandArgumentDefinition
+> = TDefinition["rest"] extends true
+  ? FluxerResolvedCommandValue<TDefinition["type"]>[]
+  : TDefinition["required"] extends true
+    ? FluxerResolvedCommandValue<TDefinition["type"]>
+    : FluxerResolvedCommandValue<TDefinition["type"]> | undefined;
+
+type FluxerCommandFlagResult<
+  TDefinition extends FluxerCommandFlagDefinition
+> = TDefinition["multiple"] extends true
+  ? FluxerResolvedCommandValue<TDefinition["type"]>[]
+  : TDefinition["required"] extends true
+    ? FluxerResolvedCommandValue<TDefinition["type"]>
+    : FluxerResolvedCommandValue<TDefinition["type"]> | undefined;
+
+type FluxerCommandArgumentRecord<
+  TDefinitions extends readonly FluxerCommandArgumentDefinition[]
+> = {
+  [TDefinition in TDefinitions[number] as TDefinition["name"]]: FluxerCommandArgumentResult<TDefinition>;
+};
+
+type FluxerCommandFlagRecord<
+  TDefinitions extends readonly FluxerCommandFlagDefinition[]
+> = {
+  [TDefinition in TDefinitions[number] as TDefinition["name"]]: FluxerCommandFlagResult<TDefinition>;
+};
+
+export interface FluxerCommandArgumentDefinition<
+  TName extends string = string,
+  TType extends FluxerCommandValueType = FluxerCommandValueType
+> {
+  name: TName;
+  type?: TType;
+  description?: string;
+  required?: boolean;
+  rest?: boolean;
+}
+
+export interface FluxerCommandFlagDefinition<
+  TName extends string = string,
+  TType extends FluxerCommandValueType = FluxerCommandValueType
+> {
+  name: TName;
+  short?: string;
+  type?: TType;
+  description?: string;
+  required?: boolean;
+  multiple?: boolean;
+  defaultValue?: FluxerResolvedCommandValue<TType>;
+}
+
+export interface FluxerCommandSchema<
+  TArgs extends readonly FluxerCommandArgumentDefinition[] = readonly FluxerCommandArgumentDefinition[],
+  TFlags extends readonly FluxerCommandFlagDefinition[] = readonly FluxerCommandFlagDefinition[]
+> {
+  args?: TArgs;
+  flags?: TFlags;
+  allowUnknownFlags?: boolean;
+}
+
+export type FluxerParsedCommandInput<
+  TSchema extends FluxerCommandSchema | undefined = undefined
+> = TSchema extends FluxerCommandSchema<infer TArgs, infer TFlags>
+  ? {
+      args: FluxerCommandArgumentRecord<TArgs>;
+      flags: FluxerCommandFlagRecord<TFlags>;
+      rawArgs: string[];
+      unknownFlags: string[];
+    }
+  : null;
+
+export interface CommandContext<
+  TSchema extends FluxerCommandSchema | undefined = FluxerCommandSchema | undefined
+> {
   client: FluxerClientLike;
   bot: FluxerBotLike;
   command: FluxerCommand;
   message: FluxerMessage;
   args: string[];
+  input: FluxerParsedCommandInput<TSchema>;
   commandName: string;
   state: Record<string, unknown>;
   reply: (
@@ -201,6 +283,11 @@ export type FluxerCommandMiddleware = (
   context: CommandContext,
   next: FluxerCommandNext
 ) => Promise<void> | void;
+export type FluxerCommandExecutor<
+  TSchema extends FluxerCommandSchema | undefined = FluxerCommandSchema | undefined
+> = {
+  bivarianceHack: (context: CommandContext<TSchema>) => Promise<void> | void;
+}["bivarianceHack"];
 
 export interface FluxerCommandExecutionHooks {
   beforeCommand?: (context: CommandContext) => Promise<void> | void;
@@ -217,6 +304,11 @@ export interface FluxerCommandExecutionHooks {
     commandContext: CommandContext;
     result: FluxerGuardDecision;
   }) => Promise<void> | void;
+  commandInvalid?: (context: {
+    command: FluxerCommand;
+    commandContext: CommandContext;
+    error: Error;
+  }) => Promise<void> | void;
   commandError?: (context: {
     command: FluxerCommand;
     commandContext: CommandContext;
@@ -224,13 +316,16 @@ export interface FluxerCommandExecutionHooks {
   }) => Promise<void> | void;
 }
 
-export interface FluxerCommand {
+export interface FluxerCommand<
+  TSchema extends FluxerCommandSchema | undefined = FluxerCommandSchema | undefined
+> {
   name: string;
   aliases?: string[];
   description?: string;
+  schema?: TSchema;
   guards?: FluxerCommandGuard[];
   middleware?: FluxerCommandMiddleware[];
-  execute: (context: CommandContext) => Promise<void> | void;
+  execute: FluxerCommandExecutor<TSchema>;
 }
 
 export interface FluxerBotOptions {

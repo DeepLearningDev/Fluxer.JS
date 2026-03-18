@@ -6,6 +6,11 @@ export {
 } from "./core/builders.js";
 export { FluxerClient } from "./core/Client.js";
 export {
+  defineCommand,
+  formatCommandUsage,
+  parseCommandSchemaInput
+} from "./core/CommandSchema.js";
+export {
   parseCommandInput,
   tokenizeCommandInput
 } from "./core/CommandParser.js";
@@ -16,6 +21,7 @@ export {
   resolveDiscoveryUrl
 } from "./core/Discovery.js";
 export {
+  CommandSchemaError,
   FluxerError,
   GatewayProtocolError,
   GatewayTransportError
@@ -41,9 +47,13 @@ export type {
   FluxerBotLike,
   FluxerBotOptions,
   FluxerCommandExecutionHooks,
+  FluxerCommandArgumentDefinition,
   FluxerCommandGuard,
+  FluxerCommandFlagDefinition,
   FluxerCommandMiddleware,
   FluxerCommandNext,
+  FluxerCommandSchema,
+  FluxerCommandValueType,
   FluxerChannel,
   FluxerClientLike,
   FluxerCommand,
@@ -77,6 +87,7 @@ export type {
   FluxerMessage,
   FluxerPresence,
   FluxerPermissionPolicy,
+  FluxerParsedCommandInput,
   FluxerPlugin,
   FluxerPluginContext,
   FluxerReactionEmoji,

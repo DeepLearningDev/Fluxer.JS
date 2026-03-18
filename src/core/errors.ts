@@ -43,3 +43,12 @@ export class GatewayProtocolError extends GatewayTransportError {
     this.eventType = options.eventType;
   }
 }
+
+export class CommandSchemaError extends FluxerError {
+  public readonly usage?: string;
+
+  public constructor(message: string, options?: { usage?: string }) {
+    super(message, "COMMAND_SCHEMA_INVALID");
+    this.usage = options?.usage;
+  }
+}

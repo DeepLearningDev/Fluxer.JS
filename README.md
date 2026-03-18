@@ -32,7 +32,8 @@ import {
   FluxerClient,
   MessageBuilder,
   createEssentialsPlugin,
-  createPermissionGuard
+  createPermissionGuard,
+  defineCommand
 } from "fluxer-js";
 import type { FluxerModule } from "fluxer-js";
 
@@ -74,7 +75,7 @@ const utilityModule: FluxerModule = {
         state.lastCommand = "ping";
       }
     },
-    {
+    defineCommand({
       name: "admin",
       guards: [
         createPermissionGuard({
@@ -86,7 +87,20 @@ const utilityModule: FluxerModule = {
       execute: async ({ reply }) => {
         await reply("Admin access granted.");
       }
-    }
+    }),
+    defineCommand({
+      name: "echo",
+      description: "Echoes text with optional formatting flags.",
+      schema: {
+        args: [{ name: "text", required: true, rest: true }],
+        flags: [{ name: "upper", short: "u" }],
+        allowUnknownFlags: false
+      },
+      execute: async ({ input, reply }) => {
+        const text = input.args.text.join(" ");
+        await reply(input.flags.upper ? text.toUpperCase() : text);
+      }
+    })
   ]
 };
 
@@ -105,6 +119,9 @@ Core command behavior is intentionally strict:
 - Duplicate command names and aliases throw immediately
 - Quoted arguments are parsed as a single argument
 - Empty command invocations are ignored cleanly
+- Schema-defined args and flags are validated before execution
+- Invalid schema input replies with a usage string by default
+- `defineCommand(...)` preserves typed `input.args` and `input.flags`
 
 Rich messages are now builder-driven:
 
@@ -180,6 +197,7 @@ Current state is the SDK foundation layer:
 - Gateway dispatches and higher-level plugins now have first-class entry points
 - Gateway normalization now covers messages, channels, guilds, moderation, invites, members, presence, typing, roles, reactions, and voice
 - Gateway runtime now exposes state/session transitions, typed protocol errors, and structured debug hooks
+- Prefix commands now support schema-based args and flags with typed command input
 
 This is still not a production framework. The biggest missing pieces are:
 

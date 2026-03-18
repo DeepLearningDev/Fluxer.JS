@@ -1,17 +1,22 @@
 import { resolveMessagePayload } from "./builders.js";
 import { parseCommandInput } from "./CommandParser.js";
+import { formatCommandUsage, parseCommandSchemaInput } from "./CommandSchema.js";
 import type { FluxerClient } from "./Client.js";
+import { CommandSchemaError } from "./errors.js";
 import type {
   CommandContext,
+  FluxerCommand,
   FluxerCommandExecutionHooks,
+  FluxerCommandSchema,
   FluxerCommandGuard,
   FluxerCommandMiddleware,
   FluxerModule,
   FluxerBotOptions,
-  FluxerCommand,
   FluxerMessage
 } from "./types.js";
 import type { FluxerPlugin } from "./types.js";
+
+type AnyCommand = FluxerCommand<FluxerCommandSchema | undefined>;
 
 export class FluxerBot {
   readonly name: string;
@@ -20,7 +25,7 @@ export class FluxerBot {
   readonly caseSensitiveCommands: boolean;
 
   #client?: FluxerClient;
-  #commands = new Map<string, FluxerCommand>();
+  #commands = new Map<string, AnyCommand>();
   #guards: FluxerCommandGuard[] = [];
   #middleware: FluxerCommandMiddleware[] = [];
   #hookSets: FluxerCommandExecutionHooks[] = [];
@@ -43,11 +48,13 @@ export class FluxerBot {
     this.#client = client;
   }
 
-  public command(command: FluxerCommand): this {
-    this.#registerCommandKey(command.name, command);
+  public command<TSchema extends FluxerCommandSchema | undefined>(
+    command: FluxerCommand<TSchema>
+  ): this {
+    this.#registerCommandKey(command.name, command as unknown as AnyCommand);
 
     for (const alias of command.aliases ?? []) {
-      this.#registerCommandKey(alias, command);
+      this.#registerCommandKey(alias, command as unknown as AnyCommand);
     }
 
     return this;
@@ -158,7 +165,7 @@ export class FluxerBot {
     return [...this.#plugins];
   }
 
-  public get commands(): FluxerCommand[] {
+  public get commands(): AnyCommand[] {
     return [...new Set(this.#commands.values())];
   }
 
@@ -166,7 +173,7 @@ export class FluxerBot {
     return this.#commands.has(this.#normalizeCommandKey(name));
   }
 
-  public getCommand(name: string): FluxerCommand | undefined {
+  public getCommand(name: string): AnyCommand | undefined {
     return this.#commands.get(this.#normalizeCommandKey(name));
   }
 
@@ -203,6 +210,7 @@ export class FluxerBot {
       command,
       message,
       args,
+      input: null,
       commandName,
       state: {},
       reply: async (replyMessage) => {
@@ -212,6 +220,24 @@ export class FluxerBot {
         );
       }
     };
+
+    if (command.schema) {
+      try {
+        context.input = parseCommandSchemaInput(args, command.schema, {
+          prefix: this.prefix,
+          commandName: command.name
+        });
+      } catch (error) {
+        const normalizedError = this.#normalizeSchemaError(error, command);
+        await this.#runHook("commandInvalid", {
+          command,
+          commandContext: context,
+          error: normalizedError
+        });
+        await context.reply(normalizedError.message);
+        return;
+      }
+    }
 
     const blockedResult = await this.#runGuards(context, command);
     if (blockedResult) {
@@ -303,6 +329,27 @@ export class FluxerBot {
     return result;
   }
 
+  #normalizeSchemaError(error: unknown, command: AnyCommand): CommandSchemaError {
+    if (error instanceof CommandSchemaError) {
+      const usage = error.usage
+        ?? (command.schema
+          ? formatCommandUsage(command.schema, {
+              prefix: this.prefix,
+              commandName: command.name
+            })
+          : undefined);
+      return usage ? new CommandSchemaError(`${error.message}\n${usage}`, { usage }) : error;
+    }
+
+    const usage = command.schema
+      ? formatCommandUsage(command.schema, {
+          prefix: this.prefix,
+          commandName: command.name
+        })
+      : undefined;
+    return new CommandSchemaError("Invalid command input.", { usage });
+  }
+
   async #runHook<K extends keyof FluxerCommandExecutionHooks>(
     hookName: K,
     payload: Parameters<NonNullable<FluxerCommandExecutionHooks[K]>>[0]
@@ -315,7 +362,7 @@ export class FluxerBot {
     }
   }
 
-  #registerCommandKey(key: string, command: FluxerCommand): void {
+  #registerCommandKey(key: string, command: AnyCommand): void {
     const normalizedKey = this.#normalizeCommandKey(key);
     const existingCommand = this.#commands.get(normalizedKey);
 

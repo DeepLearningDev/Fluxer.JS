@@ -1,9 +1,10 @@
 import { FluxerBot } from "./core/Bot.js";
 import { EmbedBuilder, MessageBuilder } from "./core/builders.js";
+import { defineCommand } from "./core/CommandSchema.js";
 import { FluxerClient } from "./core/Client.js";
 import { MockTransport } from "./core/MockTransport.js";
 import { createPermissionGuard } from "./core/Permissions.js";
-import type { FluxerModule } from "./core/types.js";
+import type { CommandContext, FluxerModule } from "./core/types.js";
 import { createEssentialsPlugin } from "./plugins/essentials.js";
 
 const transport = new MockTransport();
@@ -40,13 +41,41 @@ bot.use(async (context, next) => {
   console.log(`Command "${context.commandName}" finished in ${context.state.durationMs}ms`);
 });
 
+const echoCommand = defineCommand({
+  name: "echo",
+  description: "Echo back the provided message.",
+  schema: {
+    args: [
+      { name: "text", required: true, rest: true }
+    ] as const,
+    flags: [
+      { name: "upper", short: "u" }
+    ] as const,
+    allowUnknownFlags: false
+  },
+  guards: [
+    ({ input }) => {
+      const text = input?.args.text;
+      if (!Array.isArray(text) || text.length === 0) {
+        return "Provide text to echo.";
+      }
+
+      return true;
+    }
+  ],
+  execute: async ({ input, reply }) => {
+    const text = Array.isArray(input?.args.text) ? input.args.text.join(" ").trim() : "";
+    await reply(input?.flags.upper ? text.toUpperCase() : text);
+  }
+});
+
 const utilityModule: FluxerModule = {
   name: "utility",
   commands: [
     {
       name: "ping",
       description: "Check whether the bot is alive.",
-      execute: async ({ reply, state }) => {
+      execute: async ({ reply, state }: CommandContext) => {
         await reply(
           new MessageBuilder()
             .setContent("pong")
@@ -61,22 +90,7 @@ const utilityModule: FluxerModule = {
         state.lastCommand = "ping";
       }
     },
-    {
-      name: "echo",
-      description: "Echo back the provided message.",
-      guards: [
-        ({ args }) => {
-          if (args.length === 0) {
-            return "Provide text to echo.";
-          }
-
-          return true;
-        }
-      ],
-      execute: async ({ args, reply }) => {
-        await reply(args.join(" ").trim());
-      }
-    },
+    echoCommand,
     {
       name: "admin",
       description: "Restricted command for bot operators.",
@@ -87,7 +101,7 @@ const utilityModule: FluxerModule = {
           reason: "This command is restricted to approved operators in server text channels."
         })
       ],
-      execute: async ({ reply }) => {
+      execute: async ({ reply }: CommandContext) => {
         await reply("Admin command granted.");
       }
     }
