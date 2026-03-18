@@ -92,6 +92,24 @@ export interface FluxerVoiceServerUpdate {
   endpoint?: string;
 }
 
+export interface FluxerBanEvent {
+  guildId: string;
+  user: FluxerUser;
+}
+
+export interface FluxerInvite {
+  code: string;
+  channelId?: string;
+  guildId?: string;
+  inviter?: FluxerUser;
+  uses?: number;
+  maxUses?: number;
+  maxAgeSeconds?: number;
+  temporary?: boolean;
+  createdAt?: Date;
+  expiresAt?: Date;
+}
+
 export interface MessageBuilderLike {
   toJSON(): Omit<SendMessagePayload, "channelId">;
 }
@@ -263,9 +281,13 @@ export interface FluxerEventMap {
   roleCreate: FluxerRole;
   roleUpdate: FluxerRole;
   roleDelete: { id: string; guildId: string };
+  guildBanAdd: FluxerBanEvent;
+  guildBanRemove: FluxerBanEvent;
   guildMemberAdd: FluxerGuildMember;
   guildMemberUpdate: FluxerGuildMember;
   guildMemberRemove: { guildId: string; user: FluxerUser };
+  inviteCreate: FluxerInvite;
+  inviteDelete: FluxerInvite;
   presenceUpdate: FluxerPresence;
   typingStart: FluxerTypingStartEvent;
   userUpdate: FluxerUser;

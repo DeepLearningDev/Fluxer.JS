@@ -673,6 +673,135 @@ test("maps role, reaction, and voice gateway events", async () => {
   ]);
 });
 
+test("maps moderation and invite gateway events", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const events: string[] = [];
+
+  client.on("guildBanAdd", (ban) => {
+    events.push(`ban-add:${ban.guildId}:${ban.user.username}`);
+  });
+
+  client.on("guildBanRemove", (ban) => {
+    events.push(`ban-remove:${ban.guildId}:${ban.user.username}`);
+  });
+
+  client.on("inviteCreate", (invite) => {
+    events.push(`invite-create:${invite.code}:${invite.inviter?.username ?? "unknown"}`);
+  });
+
+  client.on("inviteDelete", (invite) => {
+    events.push(`invite-delete:${invite.code}:${invite.channelId}`);
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "GUILD_BAN_ADD",
+    sequence: 11,
+    data: {
+      guild_id: "guild_1",
+      user: {
+        id: "user_2",
+        username: "modtarget"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        guild_id: "guild_1",
+        user: {
+          id: "user_2",
+          username: "modtarget"
+        }
+      },
+      s: 11,
+      t: "GUILD_BAN_ADD"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "GUILD_BAN_REMOVE",
+    sequence: 12,
+    data: {
+      guild_id: "guild_1",
+      user: {
+        id: "user_2",
+        username: "modtarget"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        guild_id: "guild_1",
+        user: {
+          id: "user_2",
+          username: "modtarget"
+        }
+      },
+      s: 12,
+      t: "GUILD_BAN_REMOVE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "INVITE_CREATE",
+    sequence: 13,
+    data: {
+      code: "welcome123",
+      channel_id: "general",
+      guild_id: "guild_1",
+      inviter: {
+        id: "user_1",
+        username: "fluxguy"
+      },
+      uses: 0,
+      max_uses: 5
+    },
+    raw: {
+      op: 0,
+      d: {
+        code: "welcome123",
+        channel_id: "general",
+        guild_id: "guild_1",
+        inviter: {
+          id: "user_1",
+          username: "fluxguy"
+        },
+        uses: 0,
+        max_uses: 5
+      },
+      s: 13,
+      t: "INVITE_CREATE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "INVITE_DELETE",
+    sequence: 14,
+    data: {
+      code: "welcome123",
+      channel_id: "general",
+      guild_id: "guild_1"
+    },
+    raw: {
+      op: 0,
+      d: {
+        code: "welcome123",
+        channel_id: "general",
+        guild_id: "guild_1"
+      },
+      s: 14,
+      t: "INVITE_DELETE"
+    }
+  });
+
+  assert.deepEqual(events, [
+    "ban-add:guild_1:modtarget",
+    "ban-remove:guild_1:modtarget",
+    "invite-create:welcome123:fluxguy",
+    "invite-delete:welcome123:general"
+  ]);
+});
+
 test("tracks gateway state and resumes sessions on reconnect", async () => {
   const sockets: FakeWebSocket[] = [];
   const states: string[] = [];

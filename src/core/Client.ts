@@ -7,6 +7,7 @@ import type {
   FluxerGatewayDispatchEvent,
   FluxerGuild,
   FluxerGuildMember,
+  FluxerInvite,
   FluxerMessage,
   FluxerPresence,
   FluxerReactionEvent,
@@ -199,6 +200,29 @@ export class FluxerClient extends EventEmitter {
             guildId: payload.guild_id,
             user
           });
+        }
+        return;
+      }
+      case "GUILD_BAN_ADD":
+      case "GUILD_BAN_REMOVE": {
+        const payload = event.data as {
+          guild_id?: string;
+          user?: { id?: string; username?: string; global_name?: string; bot?: boolean };
+        };
+        const user = this.#parseGatewayUser(payload.user);
+        if (payload.guild_id && user) {
+          this.emit(event.type === "GUILD_BAN_ADD" ? "guildBanAdd" : "guildBanRemove", {
+            guildId: payload.guild_id,
+            user
+          });
+        }
+        return;
+      }
+      case "INVITE_CREATE":
+      case "INVITE_DELETE": {
+        const invite = this.#parseGatewayInvite(event);
+        if (invite) {
+          this.emit(event.type === "INVITE_CREATE" ? "inviteCreate" : "inviteDelete", invite);
         }
         return;
       }
@@ -477,6 +501,38 @@ export class FluxerClient extends EventEmitter {
       guildId: payload.guild_id,
       token: payload.token,
       endpoint: payload.endpoint ?? undefined
+    };
+  }
+
+  #parseGatewayInvite(event: FluxerGatewayDispatchEvent): FluxerInvite | null {
+    const payload = event.data as {
+      code?: string;
+      channel_id?: string;
+      guild_id?: string;
+      inviter?: { id?: string; username?: string; global_name?: string; bot?: boolean };
+      uses?: number;
+      max_uses?: number;
+      max_age?: number;
+      temporary?: boolean;
+      created_at?: string;
+      expires_at?: string | null;
+    };
+
+    if (!payload.code) {
+      return null;
+    }
+
+    return {
+      code: payload.code,
+      channelId: payload.channel_id,
+      guildId: payload.guild_id,
+      inviter: this.#parseGatewayUser(payload.inviter) ?? undefined,
+      uses: payload.uses,
+      maxUses: payload.max_uses,
+      maxAgeSeconds: payload.max_age,
+      temporary: payload.temporary,
+      createdAt: payload.created_at ? new Date(payload.created_at) : undefined,
+      expiresAt: payload.expires_at ? new Date(payload.expires_at) : undefined
     };
   }
 
