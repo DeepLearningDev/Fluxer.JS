@@ -317,6 +317,8 @@ Typed diagnostics currently cover failure modes such as:
 - missing identify payload generation
 - reconnect exhaustion or reconnect-disabled paths
 
+A code-by-code reference for current gateway failures lives in [docs/GatewayErrorCodes.md](./docs/GatewayErrorCodes.md).
+
 Current assumptions:
 
 - Fluxer gateway opcodes and session lifecycle are close enough to Discord-style semantics for `HELLO`, `IDENTIFY`, `RESUME`, `RECONNECT`, `INVALID_SESSION`, and `HEARTBEAT_ACK`
