@@ -13,16 +13,19 @@ export class FluxerError extends Error {
 export class GatewayTransportError extends FluxerError {
   public readonly state?: FluxerGatewayConnectionState;
   public readonly retryable: boolean;
+  public readonly details?: Record<string, unknown>;
 
   public constructor(options: {
     message: string;
     code: string;
     state?: FluxerGatewayConnectionState;
     retryable?: boolean;
+    details?: Record<string, unknown>;
   }) {
     super(options.message, options.code);
     this.state = options.state;
     this.retryable = options.retryable ?? false;
+    this.details = options.details;
   }
 }
 
@@ -37,6 +40,7 @@ export class GatewayProtocolError extends GatewayTransportError {
     retryable?: boolean;
     opcode?: number;
     eventType?: string;
+    details?: Record<string, unknown>;
   }) {
     super(options);
     this.opcode = options.opcode;

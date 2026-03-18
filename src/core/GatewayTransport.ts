@@ -91,7 +91,22 @@ export class GatewayTransport extends BaseTransport {
       this.#options.webSocketFactory ??
       ((url: string, protocols?: string | string[]) => new WebSocket(url, protocols));
 
-    const socket = factory(socketUrl, this.#options.protocols);
+    let socket: WebSocket;
+    try {
+      socket = factory(socketUrl, this.#options.protocols);
+    } catch (error) {
+      throw new GatewayTransportError({
+        message: "GatewayTransport failed to create a socket.",
+        code: "GATEWAY_SOCKET_FACTORY_FAILED",
+        state: this.#state,
+        retryable: true,
+        details: {
+          socketUrl,
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+
     this.#socket = socket;
 
     await new Promise<void>((resolve, reject) => {
@@ -173,10 +188,29 @@ export class GatewayTransport extends BaseTransport {
 
   #scheduleReconnect(): void {
     if (!this.#reconnect.enabled) {
+      void this.emitError(
+        new GatewayTransportError({
+          message: "Gateway reconnect is disabled.",
+          code: "GATEWAY_RECONNECT_DISABLED",
+          state: this.#state,
+          retryable: false
+        })
+      );
       return;
     }
 
     if (this.#reconnectAttempts >= this.#reconnect.maxAttempts) {
+      void this.emitError(
+        new GatewayTransportError({
+          message: "Gateway reconnect attempts are exhausted.",
+          code: "GATEWAY_RECONNECT_EXHAUSTED",
+          state: this.#state,
+          retryable: false,
+          details: {
+            maxAttempts: this.#reconnect.maxAttempts
+          }
+        })
+      );
       return;
     }
 
@@ -206,7 +240,15 @@ export class GatewayTransport extends BaseTransport {
     try {
       return JSON.parse(rawData);
     } catch {
-      return rawData;
+      throw new GatewayProtocolError({
+        message: "Gateway payload was not valid JSON.",
+        code: "GATEWAY_PAYLOAD_PARSE_FAILED",
+        state: this.#state,
+        retryable: false,
+        details: {
+          rawData
+        }
+      });
     }
   }
 
@@ -216,14 +258,38 @@ export class GatewayTransport extends BaseTransport {
     }
 
     if (!this.#options.apiBaseUrl || !this.#options.auth) {
-      throw new Error("GatewayTransport requires either a direct url or both apiBaseUrl and auth.");
+      throw new GatewayTransportError({
+        message: "GatewayTransport requires either a direct url or both apiBaseUrl and auth.",
+        code: "GATEWAY_CONFIGURATION_INVALID",
+        state: this.#state,
+        retryable: false,
+        details: {
+          hasUrl: Boolean(this.#options.url),
+          hasApiBaseUrl: Boolean(this.#options.apiBaseUrl),
+          hasAuth: Boolean(this.#options.auth)
+        }
+      });
     }
 
-    const gateway = await fetchGatewayInformation({
-      apiBaseUrl: this.#options.apiBaseUrl,
-      auth: this.#options.auth,
-      fetchImpl: this.#fetchImpl
-    });
+    let gateway;
+    try {
+      gateway = await fetchGatewayInformation({
+        apiBaseUrl: this.#options.apiBaseUrl,
+        auth: this.#options.auth,
+        fetchImpl: this.#fetchImpl
+      });
+    } catch (error) {
+      throw new GatewayTransportError({
+        message: "GatewayTransport failed to fetch gateway information.",
+        code: "GATEWAY_INFO_FETCH_FAILED",
+        state: this.#state,
+        retryable: true,
+        details: {
+          apiBaseUrl: this.#options.apiBaseUrl,
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
 
     return gateway.url;
   }
@@ -239,10 +305,24 @@ export class GatewayTransport extends BaseTransport {
 
     if (this.#isHelloPayload(payload)) {
       const heartbeatInterval = this.#resolveHeartbeatInterval(payload);
-      if (heartbeatInterval) {
-        this.#startHeartbeat(heartbeatInterval);
+      if (heartbeatInterval === null || heartbeatInterval <= 0) {
+        await this.emitError(
+          new GatewayProtocolError({
+            message: "Gateway HELLO payload did not include a valid heartbeat interval.",
+            code: "GATEWAY_HELLO_INVALID",
+            state: this.#state,
+            retryable: true,
+            opcode,
+            details: {
+              heartbeatInterval
+            }
+          })
+        );
+        this.#socket?.close();
+        return;
       }
 
+      this.#startHeartbeat(heartbeatInterval);
       this.#sendSessionStartPayload();
       return;
     }
@@ -378,6 +458,20 @@ export class GatewayTransport extends BaseTransport {
     });
 
     if (payload === undefined) {
+      void this.emitError(
+        new GatewayTransportError({
+          message: "GatewayTransport could not build an identify payload.",
+          code: "GATEWAY_IDENTIFY_UNAVAILABLE",
+          state: this.#state,
+          retryable: false,
+          details: {
+            hasIdentifyPayload: Boolean(this.#options.identifyPayload),
+            hasIdentifyBuilder: Boolean(this.#options.buildIdentifyPayload),
+            hasAuth: Boolean(this.#options.auth)
+          }
+        })
+      );
+      this.#socket.close();
       return;
     }
 
@@ -463,7 +557,10 @@ export class GatewayTransport extends BaseTransport {
           message: fallback,
           code: "GATEWAY_UNKNOWN_ERROR",
           state: this.#state,
-          retryable: false
+          retryable: false,
+          details: {
+            value: error
+          }
         });
   }
 

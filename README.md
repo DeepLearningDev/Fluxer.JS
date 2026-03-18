@@ -310,6 +310,13 @@ Current runtime guarantees:
 - transport/protocol failures surface typed errors instead of generic strings
 - raw dispatch access remains available even when a payload is not normalized yet
 
+Typed diagnostics currently cover failure modes such as:
+
+- invalid JSON payloads
+- malformed `HELLO` payloads
+- missing identify payload generation
+- reconnect exhaustion or reconnect-disabled paths
+
 Current assumptions:
 
 - Fluxer gateway opcodes and session lifecycle are close enough to Discord-style semantics for `HELLO`, `IDENTIFY`, `RESUME`, `RECONNECT`, `INVALID_SESSION`, and `HEARTBEAT_ACK`

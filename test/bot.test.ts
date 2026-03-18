@@ -87,6 +87,10 @@ class FakeWebSocket {
     this.#emit("message", { data: JSON.stringify(data) });
   }
 
+  public emitRawMessage(data: unknown): void {
+    this.#emit("message", { data });
+  }
+
   public emitError(): void {
     this.#emit("error");
   }
@@ -2102,9 +2106,12 @@ test("reconnects after heartbeat timeout and resumes the session", async () => {
     }
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  for (let attempt = 0; attempt < 20 && !sockets[1]; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 
   const secondSocket = sockets[1];
+  assert.ok(secondSocket);
   secondSocket.emitOpen();
   secondSocket.emitMessage({
     op: 10,
@@ -2120,4 +2127,184 @@ test("reconnects after heartbeat timeout and resumes the session", async () => {
     && error.message.includes("heartbeat was not acknowledged")
   ));
   assert.ok(states.includes("reconnecting"));
+});
+
+test("emits typed diagnostics for invalid JSON payloads", async () => {
+  const sockets: FakeWebSocket[] = [];
+  const errors: Error[] = [];
+
+  const transport = new GatewayTransport({
+    url: "wss://gateway.fluxer.test",
+    auth: { token: "bot-token" },
+    webSocketFactory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    buildIdentifyPayload: ({ auth }) => ({
+      op: 2,
+      d: { token: auth?.token }
+    }),
+    parseMessageEvent: () => null
+  });
+
+  transport.onError((error) => {
+    errors.push(error);
+  });
+
+  const connectPromise = transport.connect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = sockets[0];
+  socket.emitOpen();
+  await connectPromise;
+
+  socket.emitRawMessage("{not-json");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const error = errors.find((candidate) =>
+    candidate instanceof GatewayProtocolError
+    && candidate.code === "GATEWAY_PAYLOAD_PARSE_FAILED"
+  );
+
+  assert.ok(error instanceof GatewayProtocolError);
+  assert.equal(error.retryable, false);
+  assert.equal(error.details?.rawData, "{not-json");
+});
+
+test("emits typed diagnostics for malformed hello payloads", async () => {
+  const sockets: FakeWebSocket[] = [];
+  const errors: Error[] = [];
+
+  const transport = new GatewayTransport({
+    url: "wss://gateway.fluxer.test",
+    auth: { token: "bot-token" },
+    webSocketFactory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    buildIdentifyPayload: ({ auth }) => ({
+      op: 2,
+      d: { token: auth?.token }
+    }),
+    parseMessageEvent: () => null
+  });
+
+  transport.onError((error) => {
+    errors.push(error);
+  });
+
+  const connectPromise = transport.connect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = sockets[0];
+  socket.emitOpen();
+  await connectPromise;
+
+  socket.emitMessage({
+    op: 10,
+    d: {}
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const error = errors.find((candidate) =>
+    candidate instanceof GatewayProtocolError
+    && candidate.code === "GATEWAY_HELLO_INVALID"
+  );
+
+  assert.ok(error instanceof GatewayProtocolError);
+  assert.equal(error.retryable, true);
+  assert.equal(error.details?.heartbeatInterval, null);
+});
+
+test("emits typed diagnostics when identify payload cannot be built", async () => {
+  const sockets: FakeWebSocket[] = [];
+  const errors: Error[] = [];
+
+  const transport = new GatewayTransport({
+    url: "wss://gateway.fluxer.test",
+    webSocketFactory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    parseMessageEvent: () => null
+  });
+
+  transport.onError((error) => {
+    errors.push(error);
+  });
+
+  const connectPromise = transport.connect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = sockets[0];
+  socket.emitOpen();
+  await connectPromise;
+
+  socket.emitMessage({
+    op: 10,
+    d: {
+      heartbeat_interval: 1000
+    }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const error = errors.find((candidate) =>
+    candidate instanceof GatewayTransportError
+    && candidate.code === "GATEWAY_IDENTIFY_UNAVAILABLE"
+  );
+
+  assert.ok(error instanceof GatewayTransportError);
+  assert.equal(error.retryable, false);
+  assert.deepEqual(error.details, {
+    hasIdentifyPayload: false,
+    hasIdentifyBuilder: false,
+    hasAuth: false
+  });
+});
+
+test("emits typed diagnostics when reconnect attempts are exhausted", async () => {
+  const sockets: FakeWebSocket[] = [];
+  const errors: Error[] = [];
+
+  const transport = new GatewayTransport({
+    url: "wss://gateway.fluxer.test",
+    auth: { token: "bot-token" },
+    reconnect: {
+      baseDelayMs: 0,
+      maxDelayMs: 0,
+      maxAttempts: 0
+    },
+    webSocketFactory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    buildIdentifyPayload: ({ auth }) => ({
+      op: 2,
+      d: { token: auth?.token }
+    }),
+    parseMessageEvent: () => null
+  });
+
+  transport.onError((error) => {
+    errors.push(error);
+  });
+
+  const connectPromise = transport.connect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = sockets[0];
+  socket.emitOpen();
+  await connectPromise;
+
+  socket.close();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const error = errors.find((candidate) =>
+    candidate instanceof GatewayTransportError
+    && candidate.code === "GATEWAY_RECONNECT_EXHAUSTED"
+  );
+
+  assert.ok(error instanceof GatewayTransportError);
+  assert.equal(error.retryable, false);
+  assert.equal(error.details?.maxAttempts, 0);
 });
