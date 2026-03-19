@@ -54,12 +54,14 @@ Details:
   hasBaseUrl: boolean;
   hasDiscovery: boolean;
   hasInstanceUrl: boolean;
+  limit?: number;
 }
 ```
 
 Typical fix:
 
 - provide `baseUrl`, `discovery`, or `instanceUrl`
+- when calling `listMessages(...)`, keep `limit` within the documented `1-100` range
 
 ### `REST_DISCOVERY_FAILED`
 
@@ -98,9 +100,10 @@ Details:
 
 ```ts
 {
-  method: "POST";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   url: string;
-  channelId: string;
+  channelId?: string;
+  messageId?: string;
   message: string;
 }
 ```
@@ -124,9 +127,10 @@ Details:
 
 ```ts
 {
-  method: "POST";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   url: string;
-  channelId: string;
+  channelId?: string;
+  messageId?: string;
   statusText: string;
   responseBody?: string;
 }
@@ -150,9 +154,10 @@ Details:
 
 ```ts
 {
-  method: "POST";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   url: string;
-  channelId: string;
+  channelId?: string;
+  messageId?: string;
   statusText: string;
   responseBody?: string;
   retryAfterMs?: number;
@@ -167,6 +172,35 @@ Typical fix:
 - wait at least `retryAfterMs` when present before retrying
 - inspect instance-specific rate-limit headers or body metadata if `retryAfterMs` is absent
 - avoid treating rate limits as generic permission or payload failures
+
+### `REST_RESPONSE_INVALID`
+
+Meaning:
+
+- the request succeeded, but the response body was not valid JSON or did not include the minimum fields needed for the current operation
+
+Retryable:
+
+- `false`
+
+Details:
+
+```ts
+{
+  method?: "GET" | "PATCH";
+  url?: string;
+  channelId?: string;
+  messageId?: string;
+  payload?: unknown;
+}
+```
+
+Typical fix:
+
+- inspect the instance response body and verify the endpoint still matches the expected Fluxer message contract
+- check custom proxies or adapters that may be rewriting the response
+
+This can also happen when `listMessages(...)` returns something other than a JSON array of message objects.
 
 ## Practical Usage
 

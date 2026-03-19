@@ -86,6 +86,7 @@ export {
 export { createEssentialsPlugin } from "./plugins/essentials.js";
 export type {
   CommandContext,
+  EditMessagePayload,
   FluxerAuth,
   FluxerAttachment,
   FluxerAttachmentData,
@@ -136,10 +137,12 @@ export type {
   FluxerInstanceCapabilities,
   FluxerInstanceInfo,
   FluxerInvite,
+  FluxerListMessagesOptions,
   FluxerModule,
   FluxerBulkMessageDeleteEvent,
   FluxerMessageReference,
   FluxerMessageHandler,
+  FluxerMessageInput,
   FluxerMessage,
   FluxerMessageAwaitOptions,
   FluxerMessageCollectorOptions,

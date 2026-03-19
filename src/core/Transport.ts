@@ -1,13 +1,18 @@
 import type {
   FluxerDebugHandler,
+  EditMessagePayload,
   FluxerErrorHandler,
   FluxerGatewayDispatchHandler,
   FluxerGatewaySessionHandler,
   FluxerGatewayStateHandler,
+  FluxerChannel,
+  FluxerListMessagesOptions,
+  FluxerMessage,
   FluxerMessageHandler,
   FluxerTransport,
   SendMessagePayload
 } from "./types.js";
+import { FluxerError } from "./errors.js";
 
 export abstract class BaseTransport implements FluxerTransport {
   #messageHandler?: FluxerMessageHandler;
@@ -74,4 +79,53 @@ export abstract class BaseTransport implements FluxerTransport {
   public abstract connect(): Promise<void>;
   public abstract disconnect(): Promise<void>;
   public abstract sendMessage(payload: SendMessagePayload): Promise<void>;
+
+  public async fetchChannel(channelId: string): Promise<FluxerChannel> {
+    void channelId;
+    throw new FluxerError(
+      "This transport does not support fetching channels.",
+      "TRANSPORT_FETCH_CHANNEL_UNSUPPORTED"
+    );
+  }
+
+  public async listMessages(channelId: string, options?: FluxerListMessagesOptions): Promise<FluxerMessage[]> {
+    void channelId;
+    void options;
+    throw new FluxerError(
+      "This transport does not support listing messages.",
+      "TRANSPORT_LIST_MESSAGES_UNSUPPORTED"
+    );
+  }
+
+  public async fetchMessage(channelId: string, messageId: string): Promise<FluxerMessage> {
+    void channelId;
+    void messageId;
+    throw new FluxerError(
+      "This transport does not support fetching messages.",
+      "TRANSPORT_FETCH_MESSAGE_UNSUPPORTED"
+    );
+  }
+
+  public async editMessage(
+    channelId: string,
+    messageId: string,
+    payload: EditMessagePayload
+  ): Promise<FluxerMessage> {
+    void channelId;
+    void messageId;
+    void payload;
+    throw new FluxerError(
+      "This transport does not support editing messages.",
+      "TRANSPORT_EDIT_MESSAGE_UNSUPPORTED"
+    );
+  }
+
+  public async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    void channelId;
+    void messageId;
+    throw new FluxerError(
+      "This transport does not support deleting messages.",
+      "TRANSPORT_DELETE_MESSAGE_UNSUPPORTED"
+    );
+  }
 }

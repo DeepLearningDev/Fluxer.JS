@@ -40,7 +40,7 @@ Important alpha caveats:
 - the published package is ESM-only
 - Node `>=20` is required
 - the gateway session/runtime layer is implemented and tested, but parts of its lifecycle still rely on Discord-compatible assumptions because Fluxer's dedicated lifecycle docs are still incomplete
-- the REST surface is currently focused on bootstrap/discovery plus outbound message sending, not a broad full-platform resource client
+- the REST surface is still intentionally narrow, but it now covers bootstrap/discovery plus core channel reads and message operations: fetch channel, list messages, send, fetch, edit, and delete messages
 - release verification includes both a built-example smoke test and an installed-package smoke test through the published entrypoint
 - many common gateway event families are normalized, but not the entire Fluxer surface yet
 - this is not a production-ready framework yet
@@ -305,6 +305,9 @@ Rich messages are now builder-driven:
 - `serializeMessagePayload(...)` exposes the exact JSON-safe payload shape used by the REST serializer
 - `validateMessagePayload(...)` enforces safe defaults before the transport sends malformed payloads
 - `client.sendMessage(...)` and `context.reply(...)` accept either strings or rich payloads
+- `client.listMessages(...)` exposes the current channel message listing surface with `limit`, `before`, `after`, and `around`
+- `client.fetchChannel(...)` exposes the current channel fetch surface
+- `client.fetchMessage(...)`, `client.editMessage(...)`, and `client.deleteMessage(...)` expose the current message lifecycle surface
 
 Serializer preview example:
 
@@ -382,7 +385,7 @@ bot.command({
 The framework now supports three transport patterns:
 
 - `MockTransport` for local development and tests
-- `RestTransport` for outbound HTTP actions like sending messages
+- `RestTransport` for HTTP actions like fetching channels plus listing, sending, fetching, editing, and deleting messages
 - `GatewayTransport` for realtime inbound events over WebSocket
 
 For test-heavy workflows, `FluxerTestRuntime` wraps `MockTransport` with fixture builders and deterministic event injection:

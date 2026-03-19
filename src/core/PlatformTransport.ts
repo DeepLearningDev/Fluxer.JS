@@ -1,9 +1,13 @@
 import { BaseTransport } from "./Transport.js";
 import type {
   FluxerDebugHandler,
+  EditMessagePayload,
+  FluxerChannel,
   FluxerGatewayDispatchHandler,
   FluxerGatewaySessionHandler,
   FluxerGatewayStateHandler,
+  FluxerListMessagesOptions,
+  FluxerMessage,
   FluxerMessageHandler,
   FluxerTransport,
   SendMessagePayload
@@ -66,5 +70,29 @@ export class PlatformTransport extends BaseTransport {
 
   public async sendMessage(payload: SendMessagePayload): Promise<void> {
     await this.#outbound.sendMessage(payload);
+  }
+
+  public async fetchChannel(channelId: string): Promise<FluxerChannel> {
+    return this.#outbound.fetchChannel(channelId);
+  }
+
+  public async listMessages(channelId: string, options?: FluxerListMessagesOptions): Promise<FluxerMessage[]> {
+    return this.#outbound.listMessages(channelId, options);
+  }
+
+  public async fetchMessage(channelId: string, messageId: string): Promise<FluxerMessage> {
+    return this.#outbound.fetchMessage(channelId, messageId);
+  }
+
+  public async editMessage(
+    channelId: string,
+    messageId: string,
+    payload: EditMessagePayload
+  ): Promise<FluxerMessage> {
+    return this.#outbound.editMessage(channelId, messageId, payload);
+  }
+
+  public async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    await this.#outbound.deleteMessage(channelId, messageId);
   }
 }

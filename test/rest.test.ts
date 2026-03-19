@@ -1,8 +1,90 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AttachmentBuilder, EmbedBuilder } from '../src/core/builders.js';
+import { FluxerClient } from '../src/core/Client.js';
 import { RestTransportError } from '../src/core/errors.js';
-import { RestTransport } from '../src/core/RestTransport.js';test("emits typed diagnostics for invalid rest transport configuration", async () => {
+import { MockTransport } from '../src/core/MockTransport.js';
+import { RestTransport } from '../src/core/RestTransport.js';
+
+function createRestMessageResponse(overrides: Partial<{
+  id: string;
+  content: string;
+  channel_id: string;
+  timestamp: string;
+  author: {
+    id: string;
+    username: string;
+    global_name?: string;
+    bot?: boolean;
+  };
+}> = {}): Response {
+  return new Response(JSON.stringify({
+    id: "msg_1",
+    content: "hello",
+    channel_id: "general",
+    timestamp: "2026-03-18T22:00:00.000Z",
+    author: {
+      id: "user_1",
+      username: "fluxguy"
+    },
+    ...overrides
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json"
+    }
+  });
+}
+
+function createRestChannelResponse(overrides: Partial<{
+  id: string;
+  name: string | null;
+  type: number | string;
+}> = {}): Response {
+  return new Response(JSON.stringify({
+    id: "general",
+    name: "general",
+    type: 0,
+    ...overrides
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json"
+    }
+  });
+}
+
+function createRestMessageListResponse(): Response {
+  return new Response(JSON.stringify([
+    {
+      id: "msg_2",
+      content: "second",
+      channel_id: "general",
+      timestamp: "2026-03-18T22:01:00.000Z",
+      author: {
+        id: "user_1",
+        username: "fluxguy"
+      }
+    },
+    {
+      id: "msg_1",
+      content: "first",
+      channel_id: "general",
+      timestamp: "2026-03-18T22:00:00.000Z",
+      author: {
+        id: "user_2",
+        username: "otherguy"
+      }
+    }
+  ]), {
+    status: 200,
+    headers: {
+      "content-type": "application/json"
+    }
+  });
+}
+
+test("emits typed diagnostics for invalid rest transport configuration", async () => {
   const transport = new RestTransport({});
 
   await assert.rejects(async () => {
@@ -178,5 +260,191 @@ test("serializes attachment payloads as multipart form data for rest transport",
 
   const normalizedHeaders = new Headers(requestHeaders);
   assert.equal(normalizedHeaders.has("content-type"), false);
+});
+
+test("fetches, edits, and deletes messages through rest transport lifecycle endpoints", async () => {
+  const requests: Array<{ method?: string; url: string; body?: BodyInit | null }> = [];
+
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      requests.push({
+        method: init?.method,
+        url,
+        body: init?.body
+      });
+
+      if (init?.method === "GET") {
+        return createRestMessageResponse();
+      }
+
+      if (init?.method === "PATCH") {
+        return createRestMessageResponse({
+          content: "updated"
+        });
+      }
+
+      if (init?.method === "DELETE") {
+        return new Response(null, {
+          status: 204
+        });
+      }
+
+      throw new Error(`Unexpected method: ${init?.method}`);
+    }
+  });
+
+  const fetched = await transport.fetchMessage("general", "msg_1");
+  const edited = await transport.editMessage("general", "msg_1", {
+    content: "updated"
+  });
+  await transport.deleteMessage("general", "msg_1");
+
+  assert.equal(fetched.id, "msg_1");
+  assert.equal(fetched.content, "hello");
+  assert.equal(edited.content, "updated");
+  assert.deepEqual(
+    requests.map(({ method, url }) => ({ method, url })),
+    [
+      {
+        method: "GET",
+        url: "https://fluxer.local/api/v1/channels/general/messages/msg_1"
+      },
+      {
+        method: "PATCH",
+        url: "https://fluxer.local/api/v1/channels/general/messages/msg_1"
+      },
+      {
+        method: "DELETE",
+        url: "https://fluxer.local/api/v1/channels/general/messages/msg_1"
+      }
+    ]
+  );
+  assert.equal(requests[1]?.body, JSON.stringify({ content: "updated" }));
+});
+
+test("fetches channels through rest transport and normalizes channel type", async () => {
+  const requests: string[] = [];
+
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return createRestChannelResponse({
+        id: "dm_1",
+        name: null,
+        type: 1
+      });
+    }
+  });
+
+  const channel = await transport.fetchChannel("dm_1");
+
+  assert.equal(requests[0], "https://fluxer.local/api/v1/channels/dm_1");
+  assert.deepEqual(channel, {
+    id: "dm_1",
+    name: "dm_1",
+    type: "dm"
+  });
+});
+
+test("client proxies message lifecycle operations through mock transport", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  await client.connect();
+  await client.sendMessage("general", "first");
+
+  const fetched = await client.fetchMessage("general", "mock_msg_1");
+  const edited = await client.editMessage("general", "mock_msg_1", "updated");
+  const fetchedAgain = await client.fetchMessage("general", "mock_msg_1");
+  await client.deleteMessage("general", "mock_msg_1");
+
+  assert.equal(fetched.content, "first");
+  assert.equal(edited.content, "updated");
+  assert.equal(fetchedAgain.content, "updated");
+
+  await assert.rejects(async () => {
+    await client.fetchMessage("general", "mock_msg_1");
+  }, /could not find the requested message/i);
+});
+
+test("client fetches channels through mock transport", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  await client.connect();
+  await client.sendMessage("general", "first");
+
+  const channel = await client.fetchChannel("general");
+
+  assert.deepEqual(channel, {
+    id: "general",
+    name: "general",
+    type: "text"
+  });
+});
+
+test("lists channel messages through rest transport with pagination query params", async () => {
+  const requests: string[] = [];
+
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return createRestMessageListResponse();
+    }
+  });
+
+  const messages = await transport.listMessages("general", {
+    limit: 2,
+    before: "msg_99"
+  });
+
+  assert.equal(requests[0], "https://fluxer.local/api/v1/channels/general/messages?limit=2&before=msg_99");
+  assert.deepEqual(
+    messages.map((message) => ({
+      id: message.id,
+      content: message.content,
+      authorId: message.author.id
+    })),
+    [
+      { id: "msg_2", content: "second", authorId: "user_1" },
+      { id: "msg_1", content: "first", authorId: "user_2" }
+    ]
+  );
+});
+
+test("client lists messages through mock transport in reverse chronological order", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  await client.connect();
+  await client.sendMessage("general", "first");
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  await client.sendMessage("general", "second");
+
+  const messages = await client.listMessages("general", {
+    limit: 1
+  });
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.content, "second");
+});
+
+test("rejects invalid listMessages limits", async () => {
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api"
+  });
+
+  await assert.rejects(async () => {
+    await transport.listMessages("general", { limit: 0 });
+  }, (error: unknown) => {
+    assert.ok(error instanceof RestTransportError);
+    assert.equal(error.code, "REST_CONFIGURATION_INVALID");
+    assert.equal(error.details?.limit, 0);
+    return true;
+  });
 });
 

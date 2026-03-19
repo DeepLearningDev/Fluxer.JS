@@ -3,6 +3,7 @@ import { resolveMessagePayload } from "./builders.js";
 import { FluxerMessageCollector, waitForEvent, waitForMessage } from "./Collectors.js";
 import type { FluxerBot } from "./Bot.js";
 import type {
+  EditMessagePayload,
   FluxerBulkMessageDeleteEvent,
   FluxerChannel,
   FluxerChannelPinsUpdateEvent,
@@ -12,6 +13,7 @@ import type {
   FluxerGuild,
   FluxerGuildMember,
   FluxerInvite,
+  FluxerListMessagesOptions,
   FluxerMessage,
   FluxerMessageAwaitOptions,
   FluxerMessageCollectorOptions,
@@ -19,12 +21,11 @@ import type {
   FluxerReactionEvent,
   FluxerRole,
   FluxerTransport,
+  FluxerMessageInput,
   FluxerTypingStartEvent,
   FluxerUser,
   FluxerVoiceServerUpdate,
-  FluxerVoiceState,
-  MessageBuilderLike,
-  SendMessagePayload
+  FluxerVoiceState
 } from "./types.js";
 import { MockTransport } from "./MockTransport.js";
 
@@ -196,7 +197,7 @@ export class FluxerClient extends EventEmitter {
 
   public async sendMessage(
     channelId: string,
-    message: string | Omit<SendMessagePayload, "channelId"> | MessageBuilderLike
+    message: FluxerMessageInput
   ): Promise<void> {
     const payload = {
       channelId,
@@ -232,6 +233,205 @@ export class FluxerClient extends EventEmitter {
         level: "error",
         data: {
           channelId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
+  public async fetchChannel(channelId: string): Promise<FluxerChannel> {
+    this.emitDebug({
+      scope: "client",
+      event: "fetch_channel_started",
+      level: "debug",
+      data: {
+        channelId
+      }
+    });
+
+    try {
+      const channel = await this.#transport.fetchChannel(channelId);
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_channel_succeeded",
+        level: "debug",
+        data: {
+          channelId,
+          type: channel.type
+        }
+      });
+      return channel;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Fetch channel failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_channel_failed",
+        level: "error",
+        data: {
+          channelId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
+  public async listMessages(channelId: string, options?: FluxerListMessagesOptions): Promise<FluxerMessage[]> {
+    this.emitDebug({
+      scope: "client",
+      event: "list_messages_started",
+      level: "debug",
+      data: {
+        channelId,
+        ...options
+      }
+    });
+
+    try {
+      const messages = await this.#transport.listMessages(channelId, options);
+      this.emitDebug({
+        scope: "client",
+        event: "list_messages_succeeded",
+        level: "debug",
+        data: {
+          channelId,
+          count: messages.length
+        }
+      });
+      return messages;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("List messages failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "list_messages_failed",
+        level: "error",
+        data: {
+          channelId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
+  public async fetchMessage(channelId: string, messageId: string): Promise<FluxerMessage> {
+    this.emitDebug({
+      scope: "client",
+      event: "fetch_message_started",
+      level: "debug",
+      data: {
+        channelId,
+        messageId
+      }
+    });
+
+    try {
+      const message = await this.#transport.fetchMessage(channelId, messageId);
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_message_succeeded",
+        level: "debug",
+        data: {
+          channelId,
+          messageId
+        }
+      });
+      return message;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Fetch message failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_message_failed",
+        level: "error",
+        data: {
+          channelId,
+          messageId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
+  public async editMessage(
+    channelId: string,
+    messageId: string,
+    message: FluxerMessageInput
+  ): Promise<FluxerMessage> {
+    const payload: EditMessagePayload = resolveMessagePayload(message);
+    this.emitDebug({
+      scope: "client",
+      event: "edit_message_started",
+      level: "debug",
+      data: {
+        channelId,
+        messageId,
+        hasContent: typeof payload.content === "string" && payload.content.length > 0,
+        embedCount: payload.embeds?.length ?? 0,
+        attachmentCount: payload.attachments?.length ?? 0
+      }
+    });
+
+    try {
+      const updatedMessage = await this.#transport.editMessage(channelId, messageId, payload);
+      this.emitDebug({
+        scope: "client",
+        event: "edit_message_succeeded",
+        level: "debug",
+        data: {
+          channelId,
+          messageId
+        }
+      });
+      return updatedMessage;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Edit message failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "edit_message_failed",
+        level: "error",
+        data: {
+          channelId,
+          messageId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
+  public async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    this.emitDebug({
+      scope: "client",
+      event: "delete_message_started",
+      level: "debug",
+      data: {
+        channelId,
+        messageId
+      }
+    });
+
+    try {
+      await this.#transport.deleteMessage(channelId, messageId);
+      this.emitDebug({
+        scope: "client",
+        event: "delete_message_succeeded",
+        level: "debug",
+        data: {
+          channelId,
+          messageId
+        }
+      });
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Delete message failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "delete_message_failed",
+        level: "error",
+        data: {
+          channelId,
+          messageId,
           message: normalizedError.message
         }
       });

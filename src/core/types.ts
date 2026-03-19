@@ -19,6 +19,13 @@ export interface FluxerMessage {
   createdAt: Date;
 }
 
+export interface FluxerListMessagesOptions {
+  limit?: number;
+  before?: string;
+  after?: string;
+  around?: string;
+}
+
 export interface FluxerGuild {
   id: string;
   name: string;
@@ -208,6 +215,9 @@ export interface SendMessagePayload {
   nonce?: string;
   messageReference?: FluxerMessageReference;
 }
+
+export type EditMessagePayload = Omit<SendMessagePayload, "channelId">;
+export type FluxerMessageInput = string | EditMessagePayload | MessageBuilderLike;
 
 export interface FluxerSerializedMessagePayload {
   content?: string;
@@ -555,6 +565,11 @@ export interface FluxerTransport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   sendMessage(payload: SendMessagePayload): Promise<void>;
+  fetchChannel(channelId: string): Promise<FluxerChannel>;
+  listMessages(channelId: string, options?: FluxerListMessagesOptions): Promise<FluxerMessage[]>;
+  fetchMessage(channelId: string, messageId: string): Promise<FluxerMessage>;
+  editMessage(channelId: string, messageId: string, payload: EditMessagePayload): Promise<FluxerMessage>;
+  deleteMessage(channelId: string, messageId: string): Promise<void>;
   onMessage(handler: FluxerMessageHandler): void;
   onError(handler: FluxerErrorHandler): void;
   onGatewayDispatch(handler: FluxerGatewayDispatchHandler): void;
@@ -736,10 +751,12 @@ export interface FluxerClientLike {
   isConnected(): boolean;
   emitDebug?(event: Omit<FluxerDebugEvent, "timestamp"> & { timestamp?: string }): void;
   waitForMessage?(options?: FluxerMessageAwaitOptions): Promise<FluxerMessage>;
-  sendMessage(
-    channelId: string,
-    message: string | Omit<SendMessagePayload, "channelId"> | MessageBuilderLike
-  ): Promise<void>;
+  sendMessage(channelId: string, message: FluxerMessageInput): Promise<void>;
+  fetchChannel?(channelId: string): Promise<FluxerChannel>;
+  listMessages?(channelId: string, options?: FluxerListMessagesOptions): Promise<FluxerMessage[]>;
+  fetchMessage?(channelId: string, messageId: string): Promise<FluxerMessage>;
+  editMessage?(channelId: string, messageId: string, message: FluxerMessageInput): Promise<FluxerMessage>;
+  deleteMessage?(channelId: string, messageId: string): Promise<void>;
 }
 
 export interface FluxerBotLike {

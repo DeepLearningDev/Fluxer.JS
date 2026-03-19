@@ -3,8 +3,12 @@ import { serializeMessagePayload, validateMessagePayload } from "./builders.js";
 import { RestTransportError } from "./errors.js";
 import { BaseTransport } from "./Transport.js";
 import type {
+  EditMessagePayload,
   FluxerAttachment,
+  FluxerChannel,
   FluxerInstanceDiscoveryDocument,
+  FluxerListMessagesOptions,
+  FluxerMessage,
   FluxerRestTransportOptions,
   FluxerSerializedMessagePayload,
   SendMessagePayload
@@ -66,55 +70,228 @@ export class RestTransport extends BaseTransport {
         }
       );
     } catch (error) {
-      throw new RestTransportError({
-        message: "RestTransport failed to send the request.",
-        code: "REST_REQUEST_FAILED",
-        retryable: true,
-        details: {
-          method: "POST",
-          url: requestUrl,
-          channelId: payload.channelId,
-          message: error instanceof Error ? error.message : String(error)
-        }
+      throw createRequestFailedError({
+        method: "POST",
+        url: requestUrl,
+        channelId: payload.channelId,
+        error
       });
     }
 
     if (!response.ok) {
-      const responseBody = await safeReadResponseText(response);
-      if (response.status === 429) {
-        const rateLimit = resolveRateLimitMetadata(response, responseBody);
-        throw new RestTransportError({
-          message: "RestTransport is rate limited and should be retried later.",
-          code: "REST_RATE_LIMITED",
-          status: response.status,
-          retryable: true,
-          retryAfterMs: rateLimit.retryAfterMs,
-          details: {
-            method: "POST",
-            url: requestUrl,
-            channelId: payload.channelId,
-            statusText: response.statusText,
-            responseBody,
-            retryAfterMs: rateLimit.retryAfterMs,
-            retryAfterSource: rateLimit.source,
-            bucket: rateLimit.bucket,
-            global: rateLimit.global
-          }
-        });
-      }
+      throw await createResponseError(response, {
+        method: "POST",
+        url: requestUrl,
+        channelId: payload.channelId
+      });
+    }
+  }
 
-      throw new RestTransportError({
-        message: `RestTransport failed to send message: ${response.status} ${response.statusText}`,
-        code: "REST_HTTP_ERROR",
-        status: response.status,
-        retryable: response.status >= 500,
-        details: {
-          method: "POST",
-          url: requestUrl,
-          channelId: payload.channelId,
-          statusText: response.statusText,
-          responseBody
-        }
+  public async fetchChannel(channelId: string): Promise<FluxerChannel> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/channels/${channelId}`;
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "GET",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "GET",
+        url: requestUrl,
+        channelId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "GET",
+        url: requestUrl,
+        channelId
+      });
+    }
+
+    return parseRestChannel(await parseJsonResponse(response), {
+      method: "GET",
+      url: requestUrl,
+      channelId
+    });
+  }
+
+  public async listMessages(channelId: string, options?: FluxerListMessagesOptions): Promise<FluxerMessage[]> {
+    validateListMessagesOptions(options);
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = createMessageListUrl(baseUrl, channelId, options);
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "GET",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "GET",
+        url: requestUrl,
+        channelId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "GET",
+        url: requestUrl,
+        channelId
+      });
+    }
+
+    return parseRestMessageList(await parseJsonResponse(response), {
+      method: "GET",
+      url: requestUrl,
+      channelId
+    });
+  }
+
+  public async fetchMessage(channelId: string, messageId: string): Promise<FluxerMessage> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/channels/${channelId}/messages/${messageId}`;
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "GET",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "GET",
+        url: requestUrl,
+        channelId,
+        messageId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "GET",
+        url: requestUrl,
+        channelId,
+        messageId
+      });
+    }
+
+    return parseRestMessage(await parseJsonResponse(response), {
+      method: "GET",
+      url: requestUrl,
+      channelId,
+      messageId
+    });
+  }
+
+  public async editMessage(
+    channelId: string,
+    messageId: string,
+    payload: EditMessagePayload
+  ): Promise<FluxerMessage> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/channels/${channelId}/messages/${messageId}`;
+    validateMessagePayload(payload);
+    const serializedPayload = serializeMessagePayload(payload);
+    const hasAttachments = (payload.attachments?.length ?? 0) > 0;
+    const requestBody = hasAttachments
+      ? createMultipartRequestBody({ channelId, ...payload }, serializedPayload)
+      : JSON.stringify(serializedPayload);
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "PATCH",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments
+        }),
+        body: requestBody
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "PATCH",
+        url: requestUrl,
+        channelId,
+        messageId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "PATCH",
+        url: requestUrl,
+        channelId,
+        messageId
+      });
+    }
+
+    return parseRestMessage(await parseJsonResponse(response), {
+      method: "PATCH",
+      url: requestUrl,
+      channelId,
+      messageId
+    });
+  }
+
+  public async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/channels/${channelId}/messages/${messageId}`;
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "DELETE",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "DELETE",
+        url: requestUrl,
+        channelId,
+        messageId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "DELETE",
+        url: requestUrl,
+        channelId,
+        messageId
       });
     }
   }
@@ -175,6 +352,249 @@ async function safeReadResponseText(response: Response): Promise<string | undefi
   } catch {
     return undefined;
   }
+}
+
+async function parseJsonResponse(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new RestTransportError({
+      message: "RestTransport received an invalid JSON response.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false
+    });
+  }
+}
+
+function parseRestMessage(
+  payload: unknown,
+  context: {
+    method: string;
+    url: string;
+    channelId: string;
+    messageId?: string;
+  }
+): FluxerMessage {
+  const message = payload as {
+    id?: string;
+    content?: string;
+    channel_id?: string;
+    timestamp?: string;
+    author?: {
+      id?: string;
+      username?: string;
+      global_name?: string;
+      bot?: boolean;
+    };
+  };
+
+  if (!message?.id || !message.channel_id || !message.author?.id || !message.author.username) {
+    throw new RestTransportError({
+      message: "RestTransport received a message response with missing required fields.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  return {
+    id: message.id,
+    content: typeof message.content === "string" ? message.content : "",
+    author: {
+      id: message.author.id,
+      username: message.author.username,
+      displayName: message.author.global_name,
+      isBot: message.author.bot
+    },
+    channel: {
+      id: message.channel_id,
+      name: message.channel_id,
+      type: "text"
+    },
+    createdAt: new Date(message.timestamp ?? Date.now())
+  };
+}
+
+function parseRestChannel(
+  payload: unknown,
+  context: {
+    method: string;
+    url: string;
+    channelId: string;
+  }
+): FluxerChannel {
+  const channel = payload as {
+    id?: string;
+    name?: string | null;
+    type?: number | string;
+  };
+
+  if (!channel?.id || channel.type === undefined) {
+    throw new RestTransportError({
+      message: "RestTransport received a channel response with missing required fields.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  return {
+    id: channel.id,
+    name: channel.name ?? channel.id,
+    type: normalizeChannelType(channel.type)
+  };
+}
+
+function parseRestMessageList(
+  payload: unknown,
+  context: {
+    method: string;
+    url: string;
+    channelId: string;
+  }
+): FluxerMessage[] {
+  if (!Array.isArray(payload)) {
+    throw new RestTransportError({
+      message: "RestTransport received a message list response with an invalid shape.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  return payload.map((message, index) =>
+    parseRestMessage(message, {
+      ...context,
+      messageId: typeof (message as { id?: unknown }).id === "string"
+        ? (message as { id: string }).id
+        : `index:${index}`
+    })
+  );
+}
+
+function createMessageListUrl(baseUrl: string, channelId: string, options?: FluxerListMessagesOptions): string {
+  const url = new URL(`${baseUrl}/v1/channels/${channelId}/messages`);
+  if (options?.limit !== undefined) {
+    url.searchParams.set("limit", String(options.limit));
+  }
+  if (options?.before) {
+    url.searchParams.set("before", options.before);
+  }
+  if (options?.after) {
+    url.searchParams.set("after", options.after);
+  }
+  if (options?.around) {
+    url.searchParams.set("around", options.around);
+  }
+  return url.toString();
+}
+
+function normalizeChannelType(type: number | string): FluxerChannel["type"] {
+  if (type === "dm" || type === 1) {
+    return "dm";
+  }
+
+  if (type === "group" || type === 3) {
+    return "group";
+  }
+
+  return "text";
+}
+
+function validateListMessagesOptions(options?: FluxerListMessagesOptions): void {
+  if (options?.limit === undefined) {
+    return;
+  }
+
+  if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100) {
+    throw new RestTransportError({
+      message: "RestTransport listMessages limit must be an integer between 1 and 100.",
+      code: "REST_CONFIGURATION_INVALID",
+      retryable: false,
+      details: {
+        limit: options.limit
+      }
+    });
+  }
+}
+
+function createRequestFailedError(context: {
+  method: string;
+  url: string;
+  channelId?: string;
+  messageId?: string;
+  error: unknown;
+}): RestTransportError {
+  return new RestTransportError({
+    message: "RestTransport failed to send the request.",
+    code: "REST_REQUEST_FAILED",
+    retryable: true,
+    details: {
+      method: context.method,
+      url: context.url,
+      channelId: context.channelId,
+      messageId: context.messageId,
+      message: context.error instanceof Error ? context.error.message : String(context.error)
+    }
+  });
+}
+
+async function createResponseError(
+  response: Response,
+  context: {
+    method: string;
+    url: string;
+    channelId?: string;
+    messageId?: string;
+  }
+): Promise<RestTransportError> {
+  const responseBody = await safeReadResponseText(response);
+  if (response.status === 429) {
+    const rateLimit = resolveRateLimitMetadata(response, responseBody);
+    return new RestTransportError({
+      message: "RestTransport is rate limited and should be retried later.",
+      code: "REST_RATE_LIMITED",
+      status: response.status,
+      retryable: true,
+      retryAfterMs: rateLimit.retryAfterMs,
+      details: {
+        method: context.method,
+        url: context.url,
+        channelId: context.channelId,
+        messageId: context.messageId,
+        statusText: response.statusText,
+        responseBody,
+        retryAfterMs: rateLimit.retryAfterMs,
+        retryAfterSource: rateLimit.source,
+        bucket: rateLimit.bucket,
+        global: rateLimit.global
+      }
+    });
+  }
+
+  return new RestTransportError({
+    message: `RestTransport request failed: ${response.status} ${response.statusText}`,
+    code: "REST_HTTP_ERROR",
+    status: response.status,
+    retryable: response.status >= 500,
+    details: {
+      method: context.method,
+      url: context.url,
+      channelId: context.channelId,
+      messageId: context.messageId,
+      statusText: response.statusText,
+      responseBody
+    }
+  });
 }
 
 function resolveRateLimitMetadata(
