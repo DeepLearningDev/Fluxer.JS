@@ -65,12 +65,18 @@ Once the project reaches `1.0.0`:
 
 Before publishing, the repo should pass:
 
+- `npm run lint`
 - `npm run check`
 - `npm test`
 - `npm run build`
 - `npm run pack:dry-run`
 
 The package now exposes `npm run release:check` and runs it automatically through `prepublishOnly`.
+
+These checks are also enforced in GitHub Actions:
+
+- `.github/workflows/ci.yml` runs lint plus `release:check` on pushes and pull requests
+- `.github/workflows/release-verify.yml` runs the same release verification path on version tags and manual release verification runs
 
 ## Changelog expectations
 

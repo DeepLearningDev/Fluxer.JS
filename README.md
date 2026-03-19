@@ -33,6 +33,7 @@ Current expectations:
 - package-root exports are the intended public surface
 - deep imports into internal files should not be treated as stable
 - release notes and the changelog should call out meaningful public changes explicitly
+- CI now enforces `lint` plus `release:check` on pushes, pull requests, and version-tag verification
 
 ## Getting started
 

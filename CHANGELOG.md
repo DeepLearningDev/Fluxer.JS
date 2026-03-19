@@ -8,6 +8,10 @@ with pre-release channels while the framework is not yet stable.
 
 ## [Unreleased]
 
+### Added
+
+- ESLint-based linting and GitHub Actions workflows for CI and release verification
+
 ### Planned
 
 - Remaining gateway normalization across the broader Fluxer surface

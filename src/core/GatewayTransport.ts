@@ -20,7 +20,6 @@ const DEFAULT_RECONNECT: Required<FluxerReconnectOptions> = {
 
 const DISPATCH_OPCODE = 0;
 const HEARTBEAT_OPCODE = 1;
-const IDENTIFY_OPCODE = 2;
 const RECONNECT_OPCODE = 7;
 const INVALID_SESSION_OPCODE = 9;
 const HELLO_OPCODE = 10;
@@ -76,7 +75,8 @@ export class GatewayTransport extends BaseTransport {
     await this.#setState("disconnected", "manual_disconnect");
   }
 
-  public async sendMessage(_payload: SendMessagePayload): Promise<void> {
+  public async sendMessage(payload: SendMessagePayload): Promise<void> {
+    void payload;
     throw new GatewayTransportError({
       message: "GatewayTransport cannot send messages directly. Pair it with RestTransport.",
       code: "GATEWAY_SEND_UNSUPPORTED",
