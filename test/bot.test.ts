@@ -1165,6 +1165,14 @@ test("maps gateway dispatch events onto client events", async () => {
     events.push(`message-delete:${message.id}`);
   });
 
+  client.on("messageDeleteBulk", (payload) => {
+    events.push(`message-delete-bulk:${payload.channelId}:${payload.ids.join(",")}`);
+  });
+
+  client.on("channelPinsUpdate", (payload) => {
+    events.push(`pins:${payload.channelId}:${payload.lastPinTimestamp?.toISOString() ?? "none"}`);
+  });
+
   await client.receiveGatewayDispatch({
     type: "GUILD_CREATE",
     sequence: 1,
@@ -1201,11 +1209,51 @@ test("maps gateway dispatch events onto client events", async () => {
     }
   });
 
+  await client.receiveGatewayDispatch({
+    type: "MESSAGE_DELETE_BULK",
+    sequence: 3,
+    data: {
+      ids: ["msg_10", "msg_11"],
+      channel_id: "general"
+    },
+    raw: {
+      op: 0,
+      d: {
+        ids: ["msg_10", "msg_11"],
+        channel_id: "general"
+      },
+      s: 3,
+      t: "MESSAGE_DELETE_BULK"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "CHANNEL_PINS_UPDATE",
+    sequence: 4,
+    data: {
+      channel_id: "general",
+      last_pin_timestamp: "2026-03-18T22:00:00.000Z"
+    },
+    raw: {
+      op: 0,
+      d: {
+        channel_id: "general",
+        last_pin_timestamp: "2026-03-18T22:00:00.000Z"
+      },
+      s: 4,
+      t: "CHANNEL_PINS_UPDATE"
+    }
+  });
+
   assert.deepEqual(events, [
     "dispatch:GUILD_CREATE",
     "guild:guild_1",
     "dispatch:MESSAGE_DELETE",
-    "message-delete:msg_9"
+    "message-delete:msg_9",
+    "dispatch:MESSAGE_DELETE_BULK",
+    "message-delete-bulk:general:msg_10,msg_11",
+    "dispatch:CHANNEL_PINS_UPDATE",
+    "pins:general:2026-03-18T22:00:00.000Z"
   ]);
 });
 

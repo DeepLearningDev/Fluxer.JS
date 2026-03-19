@@ -3,7 +3,9 @@ import { resolveMessagePayload } from "./builders.js";
 import { FluxerMessageCollector, waitForEvent, waitForMessage } from "./Collectors.js";
 import type { FluxerBot } from "./Bot.js";
 import type {
+  FluxerBulkMessageDeleteEvent,
   FluxerChannel,
+  FluxerChannelPinsUpdateEvent,
   FluxerDebugEvent,
   FluxerEventMap,
   FluxerGatewayDispatchEvent,
@@ -288,6 +290,13 @@ export class FluxerClient extends EventEmitter {
         }
         return;
       }
+      case "MESSAGE_DELETE_BULK": {
+        const messageDeleteBulk = this.#parseBulkMessageDelete(event);
+        if (messageDeleteBulk) {
+          this.emit("messageDeleteBulk", messageDeleteBulk);
+        }
+        return;
+      }
       case "MESSAGE_REACTION_ADD":
       case "MESSAGE_REACTION_REMOVE": {
         const reaction = this.#parseGatewayReaction(event);
@@ -316,6 +325,13 @@ export class FluxerClient extends EventEmitter {
             id: payload.id,
             guildId: payload.guild_id
           });
+        }
+        return;
+      }
+      case "CHANNEL_PINS_UPDATE": {
+        const channelPinsUpdate = this.#parseChannelPinsUpdate(event);
+        if (channelPinsUpdate) {
+          this.emit("channelPinsUpdate", channelPinsUpdate);
         }
         return;
       }
@@ -630,6 +646,47 @@ export class FluxerClient extends EventEmitter {
         name: payload.emoji.name,
         animated: payload.emoji.animated
       }
+    };
+  }
+
+  #parseBulkMessageDelete(event: FluxerGatewayDispatchEvent): FluxerBulkMessageDeleteEvent | null {
+    const payload = event.data as {
+      ids?: string[];
+      channel_id?: string;
+      guild_id?: string;
+    };
+
+    if (!Array.isArray(payload.ids) || payload.ids.length === 0 || !payload.channel_id) {
+      return null;
+    }
+
+    const ids = payload.ids.filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (ids.length === 0) {
+      return null;
+    }
+
+    return {
+      ids,
+      channelId: payload.channel_id,
+      guildId: payload.guild_id
+    };
+  }
+
+  #parseChannelPinsUpdate(event: FluxerGatewayDispatchEvent): FluxerChannelPinsUpdateEvent | null {
+    const payload = event.data as {
+      channel_id?: string;
+      guild_id?: string;
+      last_pin_timestamp?: string | null;
+    };
+
+    if (!payload.channel_id) {
+      return null;
+    }
+
+    return {
+      channelId: payload.channel_id,
+      guildId: payload.guild_id,
+      lastPinTimestamp: payload.last_pin_timestamp ? new Date(payload.last_pin_timestamp) : undefined
     };
   }
 

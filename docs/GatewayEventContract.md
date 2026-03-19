@@ -153,6 +153,30 @@ Emitted payload:
 }
 ```
 
+#### `messageDeleteBulk`
+
+Source dispatch: `MESSAGE_DELETE_BULK`
+
+Emitted only when the payload includes:
+
+- `ids` with at least one string entry
+- `channel_id`
+
+Emitted payload:
+
+```ts
+interface FluxerBulkMessageDeleteEvent {
+  ids: string[];
+  channelId: string;
+  guildId?: string;
+}
+```
+
+Normalization notes:
+
+- non-string or empty ids are filtered out
+- the event is skipped if no valid ids remain after filtering
+
 ### Reactions
 
 #### `messageReactionAdd`
@@ -228,6 +252,28 @@ Emitted payload:
   guildId?: string;
 }
 ```
+
+#### `channelPinsUpdate`
+
+Source dispatch: `CHANNEL_PINS_UPDATE`
+
+Emitted only when the payload includes:
+
+- `channel_id`
+
+Emitted payload:
+
+```ts
+interface FluxerChannelPinsUpdateEvent {
+  channelId: string;
+  guildId?: string;
+  lastPinTimestamp?: Date;
+}
+```
+
+Normalization notes:
+
+- `lastPinTimestamp` is derived from `last_pin_timestamp` when present and non-null
 
 ### Guilds
 

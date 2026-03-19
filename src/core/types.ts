@@ -58,6 +58,18 @@ export interface FluxerTypingStartEvent {
   startedAt?: Date;
 }
 
+export interface FluxerChannelPinsUpdateEvent {
+  channelId: string;
+  guildId?: string;
+  lastPinTimestamp?: Date;
+}
+
+export interface FluxerBulkMessageDeleteEvent {
+  ids: string[];
+  channelId: string;
+  guildId?: string;
+}
+
 export interface FluxerReactionEmoji {
   id?: string;
   name?: string;
@@ -495,11 +507,13 @@ export interface FluxerEventMap {
   messageCreate: FluxerMessage;
   messageUpdate: FluxerMessage;
   messageDelete: { id: string; channelId: string; guildId?: string };
+  messageDeleteBulk: FluxerBulkMessageDeleteEvent;
   messageReactionAdd: FluxerReactionEvent;
   messageReactionRemove: FluxerReactionEvent;
   channelCreate: FluxerChannel;
   channelUpdate: FluxerChannel;
   channelDelete: { id: string; guildId?: string };
+  channelPinsUpdate: FluxerChannelPinsUpdateEvent;
   guildCreate: FluxerGuild;
   guildUpdate: FluxerGuild;
   guildDelete: { id: string };

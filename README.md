@@ -354,8 +354,8 @@ The current implementation follows the official Fluxer docs:
 
 The current normalized event contract is:
 
-- message lifecycle: `messageCreate`, `messageUpdate`, `messageDelete`
-- channel lifecycle: `channelCreate`, `channelUpdate`, `channelDelete`
+- message lifecycle: `messageCreate`, `messageUpdate`, `messageDelete`, `messageDeleteBulk`
+- channel lifecycle: `channelCreate`, `channelUpdate`, `channelDelete`, `channelPinsUpdate`
 - guild lifecycle: `guildCreate`, `guildUpdate`, `guildDelete`
 - role lifecycle: `roleCreate`, `roleUpdate`, `roleDelete`
 - member lifecycle: `guildMemberAdd`, `guildMemberUpdate`, `guildMemberRemove`
@@ -437,7 +437,7 @@ Current state is the SDK foundation layer:
 - Build output and command parsing are now deterministic and test-backed
 - Rich message composition now covers embeds, attachments, templates, and transport-aware validation
 - Gateway dispatches and higher-level plugins now have first-class entry points
-- Gateway normalization now covers messages, channels, guilds, moderation, invites, members, presence, typing, roles, reactions, and voice
+- Gateway normalization now covers messages, bulk message deletes, channel pin updates, channels, guilds, moderation, invites, members, presence, typing, roles, reactions, and voice
 - Gateway runtime now exposes state/session transitions, typed protocol errors, and structured debug hooks
 - Prefix commands now support schema-based args and flags with typed command input
 - `MockTransport` now captures outbound messages and powers a reusable `FluxerTestRuntime`
