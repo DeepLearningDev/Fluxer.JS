@@ -44,7 +44,17 @@ class FakeWebSocket {
       listener(event);
     }
   }
-}test("detects self-hosted instance capabilities from discovery", () => {
+}
+
+function parseSentPayloads(socket: FakeWebSocket): Array<{ op?: number; d?: unknown }> {
+  return socket.sent.map((payload) => JSON.parse(payload) as { op?: number; d?: unknown });
+}
+
+function findSentPayloadByOpcode(socket: FakeWebSocket, opcode: number): { op?: number; d?: unknown } | undefined {
+  return parseSentPayloads(socket).find((payload) => payload.op === opcode);
+}
+
+test("detects self-hosted instance capabilities from discovery", () => {
   const discovery = {
     api_code_version: 42,
     endpoints: {
@@ -703,7 +713,7 @@ test("tracks gateway state and resumes sessions on reconnect", async () => {
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(JSON.parse(firstSocket.sent[0]).op, 2);
+  assert.equal(findSentPayloadByOpcode(firstSocket, 2)?.op, 2);
 
   firstSocket.emitMessage({
     op: 0,
@@ -728,7 +738,7 @@ test("tracks gateway state and resumes sessions on reconnect", async () => {
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(JSON.parse(secondSocket.sent[0]).op, 6);
+  assert.equal(findSentPayloadByOpcode(secondSocket, 6)?.op, 6);
 
   secondSocket.emitMessage({
     op: 0,
@@ -867,7 +877,7 @@ test("resumes after a resumable invalid session", async () => {
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(JSON.parse(secondSocket.sent[0]).op, 6);
+  assert.equal(findSentPayloadByOpcode(secondSocket, 6)?.op, 6);
 });
 
 test("re-identifies after a non-resumable invalid session", async () => {
@@ -932,7 +942,7 @@ test("re-identifies after a non-resumable invalid session", async () => {
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(JSON.parse(secondSocket.sent[0]).op, 2);
+  assert.equal(findSentPayloadByOpcode(secondSocket, 2)?.op, 2);
 });
 
 test("reconnects after heartbeat timeout and resumes the session", async () => {
@@ -1004,7 +1014,7 @@ test("reconnects after heartbeat timeout and resumes the session", async () => {
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(JSON.parse(secondSocket.sent[0]).op, 6);
+  assert.equal(findSentPayloadByOpcode(secondSocket, 6)?.op, 6);
   assert.ok(errors.some((error) =>
     error instanceof GatewayTransportError
     && error.message.includes("heartbeat was not acknowledged")

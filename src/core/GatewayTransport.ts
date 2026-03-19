@@ -24,6 +24,7 @@ const RECONNECT_OPCODE = 7;
 const INVALID_SESSION_OPCODE = 9;
 const HELLO_OPCODE = 10;
 const HEARTBEAT_ACK_OPCODE = 11;
+const SOCKET_OPEN_READY_STATE = 1;
 
 export class GatewayTransport extends BaseTransport {
   readonly #options: FluxerGatewayTransportOptions;
@@ -426,7 +427,8 @@ export class GatewayTransport extends BaseTransport {
   }
 
   #sendHeartbeat(): void {
-    if (!this.#socket || this.#socket.readyState !== WebSocket.OPEN) {
+    const socket = this.#socket;
+    if (!socket || !this.#isSocketOpen(socket)) {
       return;
     }
 
@@ -434,11 +436,12 @@ export class GatewayTransport extends BaseTransport {
     void this.#emitDebugEvent("heartbeat_sent", {
       sequence: this.#session.sequence ?? undefined
     });
-    this.#socket.send(JSON.stringify(this.#createHeartbeatPayload()));
+    socket.send(JSON.stringify(this.#createHeartbeatPayload()));
   }
 
   #sendSessionStartPayload(): void {
-    if (!this.#socket || this.#socket.readyState !== WebSocket.OPEN) {
+    const socket = this.#socket;
+    if (!socket || !this.#isSocketOpen(socket)) {
       return;
     }
 
@@ -449,7 +452,7 @@ export class GatewayTransport extends BaseTransport {
         sequence: this.#session.sequence ?? undefined,
         sessionId: this.#session.sessionId
       });
-      this.#socket.send(JSON.stringify(resumePayload));
+      socket.send(JSON.stringify(resumePayload));
       return;
     }
 
@@ -471,13 +474,17 @@ export class GatewayTransport extends BaseTransport {
           }
         })
       );
-      this.#socket.close();
+      socket.close();
       return;
     }
 
     void this.#setState("identifying");
     void this.#emitDebugEvent("identify_sent");
-    this.#socket.send(JSON.stringify(payload));
+    socket.send(JSON.stringify(payload));
+  }
+
+  #isSocketOpen(socket: WebSocket): boolean {
+    return socket.readyState === SOCKET_OPEN_READY_STATE;
   }
 
   #resolveHeartbeatInterval(payload: unknown): number | null {
