@@ -4,6 +4,7 @@ import type {
   FluxerBotLike,
   FluxerGatewayDispatchEvent,
   FluxerMessage,
+  FluxerWaitForOptions,
   SendMessagePayload
 } from "../core/types.js";
 import {
@@ -45,6 +46,82 @@ export class FluxerTestRuntime {
 
   public clearSentMessages(): void {
     this.transport.clearSentMessages();
+  }
+
+  public waitForSentMessage(
+    options: FluxerWaitForOptions<SendMessagePayload> = {}
+  ): Promise<SendMessagePayload> {
+    const existingMessage = options.filter
+      ? undefined
+      : this.sentMessages[0];
+
+    if (existingMessage && !options.filter) {
+      return Promise.resolve(existingMessage);
+    }
+
+    return new Promise<SendMessagePayload>((resolve, reject) => {
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let removeAbortListener: (() => void) | undefined;
+
+      const cleanup = (): void => {
+        settled = true;
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = undefined;
+        }
+        removeAbortListener?.();
+        unsubscribe();
+      };
+
+      const tryResolve = async (payload: SendMessagePayload): Promise<void> => {
+        const matches = await options.filter?.(payload) ?? true;
+        if (!matches || settled) {
+          return;
+        }
+
+        cleanup();
+        resolve(payload);
+      };
+
+      if (options.signal?.aborted) {
+        reject(new Error("Sent message wait aborted."));
+        return;
+      }
+
+      const unsubscribe = this.transport.onSend((payload) => void tryResolve(payload));
+
+      for (const payload of this.sentMessages) {
+        void tryResolve(payload);
+        if (settled) {
+          return;
+        }
+      }
+
+      if (options.timeoutMs !== undefined) {
+        timeout = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          cleanup();
+          reject(new Error("Timed out waiting for a sent message."));
+        }, options.timeoutMs);
+      }
+
+      if (options.signal) {
+        const onAbort = (): void => {
+          if (settled) {
+            return;
+          }
+          cleanup();
+          reject(new Error("Sent message wait aborted."));
+        };
+        options.signal.addEventListener("abort", onAbort, { once: true });
+        removeAbortListener = () => {
+          options.signal?.removeEventListener("abort", onAbort);
+        };
+      }
+    });
   }
 
   public createUser = createTestUser;

@@ -20,6 +20,13 @@ If you know `discord.js`, the closest matching ideas are:
 - transport boundaries are explicit: mock, REST, gateway, and composed platform transports are separate abstractions.
 - raw gateway dispatch access remains available even when normalized events exist.
 
+Current alpha caveats for `discord.js` users:
+
+- the framework is currently centered on message/prefix-command workflows; slash/application-command style APIs are not part of this package yet
+- `new FluxerClient()` defaults to `MockTransport`, which is great for local iteration and tests but does not connect to a live Fluxer instance by itself
+- the REST surface is currently narrower than a mature `discord.js`-style client
+- normalized message objects are intentionally lightweight; command replies flow through `reply(...)` in command context or `client.sendMessage(...)`, not a `discord.js`-style rich message instance API
+
 ## Common porting pattern
 
 ### discord.js style
@@ -65,6 +72,7 @@ Instead of hand-building message objects repeatedly, prefer:
 ## Migration advice
 
 - start by porting event listeners and basic commands into `FluxerBot`
+- switch to `createFluxerPlatformTransport(...)` once you want real hosted or self-hosted Fluxer connectivity
 - use `gatewayDispatch` for platform events that are not normalized yet
 - move rich payload helpers into builders/templates early so commands stay small
-- use `FluxerTestRuntime` to lock behavior down while migrating larger bots
+- use `FluxerTestRuntime` to lock framework behavior down while migrating larger bots, but treat it as a mock-first harness rather than a live Fluxer contract test layer

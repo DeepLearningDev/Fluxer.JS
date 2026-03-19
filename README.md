@@ -2,7 +2,7 @@
 
 TypeScript framework for building bots on Fluxer.
 
-Current release channel: `0.1.0-alpha.0`
+Current release channel: `0.1.0-alpha.1`
 
 - Changelog: [CHANGELOG.md](./CHANGELOG.md)
 - Release policy: [docs/ReleasePolicy.md](./docs/ReleasePolicy.md)
@@ -12,16 +12,16 @@ Current release channel: `0.1.0-alpha.0`
 
 ## Current scope
 
-This bootstrap gives you a clean starting point for a bot SDK:
+This alpha currently includes:
 
 - Strongly typed message and command contracts
-- A lightweight `FluxerClient` event layer
-- A transport abstraction for real Fluxer adapters later
-- A reusable `FluxerBot` base class
-- Command registration and prefix parsing
+- `FluxerClient` and `FluxerBot`
+- `MockTransport`, `RestTransport`, `GatewayTransport`, and `PlatformTransport`
+- Fluxer discovery/bootstrap helpers for hosted and self-hosted instances
+- Command registration, prefix parsing, schemas, groups, and generated help
 - Middleware, guards, and lifecycle hooks
-- Precise command parsing and duplicate-safe registration
-- An example bot entrypoint for local iteration
+- Rich message builders for embeds, attachments, and payload templates
+- Mock-transport test helpers through `FluxerTestRuntime` and fixture builders
 
 ## Release posture
 
@@ -33,18 +33,95 @@ Current expectations:
 - package-root exports are the intended public surface
 - deep imports into internal files should not be treated as stable
 - release notes and the changelog should call out meaningful public changes explicitly
-- CI now enforces `lint` plus `release:check` on pushes, pull requests, and version-tag verification
+- CI runs `npm run release:check` on pushes, pull requests, and release-tag verification, and also runs `npm run lint` as a separate step in the main CI workflow
 
-## Getting started
+Important alpha caveats:
+
+- the published package is ESM-only
+- Node `>=20` is required
+- the gateway session/runtime layer is implemented and tested, but parts of its lifecycle still rely on Discord-compatible assumptions because Fluxer's dedicated lifecycle docs are still incomplete
+- the REST surface is currently focused on bootstrap/discovery plus outbound message sending, not a broad full-platform resource client
+- many common gateway event families are normalized, but not the entire Fluxer surface yet
+- this is not a production-ready framework yet
+
+## Installation
+
+For package consumers:
+
+```bash
+npm install fluxer-js
+```
+
+The published package is ESM-only and targets Node `>=20`.
+
+If you want real Fluxer connectivity, pair `FluxerClient` with `createFluxerPlatformTransport(...)`. `new FluxerClient()` by itself uses `MockTransport`.
+
+## Repo workflow
+
+Fluxer.JS currently targets Node `>=20`.
+
+These commands are for working on this repository itself:
 
 ```bash
 npm install
+npm run dev:minimal
 npm run dev
 npm test
 npm run release:check
 ```
 
-## Example
+`npm run dev:minimal` runs the smallest local bot example in `src/examples/minimal.ts`.
+`npm run dev` runs the local example entrypoint in `src/example.ts`. By default that example uses the default `MockTransport` unless you wire in a real transport.
+
+## Usage examples
+
+### Minimal bot example
+
+This is the shortest useful local example for trying the framework. It uses `MockTransport` explicitly so the behavior is obvious, injects one message, and logs the bot response.
+
+```ts
+import { FluxerBot, FluxerClient, MockTransport } from "fluxer-js";
+
+const transport = new MockTransport();
+const client = new FluxerClient(transport);
+const bot = new FluxerBot({
+  name: "HelloBot",
+  prefix: "!"
+});
+
+bot.command({
+  name: "ping",
+  execute: async ({ reply }) => {
+    await reply("pong");
+  }
+});
+
+client.registerBot(bot);
+await client.connect();
+
+await transport.injectMessage({
+  id: "msg_1",
+  content: "!ping",
+  author: {
+    id: "user_1",
+    username: "fluxguy"
+  },
+  channel: {
+    id: "general",
+    name: "general",
+    type: "text"
+  },
+  createdAt: new Date()
+});
+
+console.log(transport.sentMessages[0]?.content); // "pong"
+```
+
+In this repository, the same example lives in `src/examples/minimal.ts` and can be run with `npm run dev:minimal`.
+
+### Full local bot example
+
+This example is useful once you want to see more of the framework surface in one place. Because it uses `new FluxerClient()` with no transport argument, it runs on the default `MockTransport`.
 
 ```ts
 import {
@@ -196,6 +273,10 @@ client.registerBot(bot);
 await client.connect();
 ```
 
+### Real instance bootstrap
+
+Use `createFluxerPlatformTransport(...)` when you want the client to talk to a real Fluxer instance over REST plus gateway transport.
+
 For synchronous modules, use `bot.module(...)`. If a module needs async setup, use `await bot.installModule(...)` so startup remains deterministic.
 
 Core command behavior is intentionally strict:
@@ -291,7 +372,8 @@ bot.command({
 ## Project layout
 
 - `src/core` contains the reusable framework pieces
-- `src/example.ts` shows how a Fluxer bot is composed
+- `src/examples/minimal.ts` is the smallest runnable local bot example
+- `src/example.ts` is a broader framework showcase
 - `src/index.ts` exports the public API
 
 ## Transport layers
@@ -302,7 +384,7 @@ The framework now supports three transport patterns:
 - `RestTransport` for outbound HTTP actions like sending messages
 - `GatewayTransport` for realtime inbound events over WebSocket
 
-For test-heavy workflows, `FluxerTestRuntime` now wraps `MockTransport` with fixture builders and deterministic event injection:
+For test-heavy workflows, `FluxerTestRuntime` wraps `MockTransport` with fixture builders and deterministic event injection:
 
 ```ts
 import { FluxerBot, FluxerTestRuntime } from "fluxer-js";
@@ -322,9 +404,14 @@ await runtime.connect();
 await runtime.injectMessage("!ping");
 
 console.log(runtime.sentMessages[0]?.content); // "pong"
+console.log((await runtime.waitForSentMessage()).content); // "pong"
 ```
 
-If Fluxer uses separate HTTP and gateway channels, combine them with `PlatformTransport`.
+`FluxerTestRuntime.waitForSentMessage(...)` lets tests observe the real outbound transport path without monkeypatching `client.sendMessage(...)`.
+
+This is still a mock-first harness. It improves framework-level test confidence, but it is not a live Fluxer contract test layer.
+
+`PlatformTransport` is the composed transport used by `createFluxerPlatformTransport(...)` for separate REST and gateway channels.
 
 Command metadata can also be inspected programmatically when you want to build your own help UI, docs, or admin panels:
 
@@ -339,12 +426,14 @@ console.log(echo?.args);
 console.log(admin?.commands);
 ```
 
-The current implementation follows the official Fluxer docs:
+The current bootstrap and message-send layer align with the documented Fluxer routes:
 
 - Discovery document: `GET /v1/.well-known/fluxer`
 - Gateway bootstrap: `GET /v1/gateway/bot`
 - Message send: `POST /v1/channels/{channel_id}/messages`
 - Bot auth header: `Authorization: Bot <token>`
+
+Gateway lifecycle behavior is still described separately below because parts of that contract are currently inferred from Fluxer's Discord-compatible guidance rather than a finished dedicated lifecycle spec.
 
 ## Gateway Event Contract
 
@@ -399,6 +488,8 @@ A code-by-code reference for current gateway failures lives in [docs/GatewayErro
 
 Non-gateway transport failures now also surface typed `RestTransportError` instances for configuration, discovery, request, and HTTP response failures. Reference: [docs/RestErrorCodes.md](./docs/RestErrorCodes.md).
 
+Rate-limited REST responses are classified separately and include retry metadata when the server provides it, but the framework does not automatically retry or back off for you yet.
+
 Current assumptions:
 
 - Fluxer gateway opcodes and session lifecycle are close enough to Discord-style semantics for `HELLO`, `IDENTIFY`, `RESUME`, `RECONNECT`, `INVALID_SESSION`, and `HEARTBEAT_ACK`
@@ -410,7 +501,6 @@ import {
   FluxerBot,
   FluxerClient,
   createFluxerPlatformTransport,
-  defaultParseMessageEvent
 } from "fluxer-js";
 
 const transport = await createFluxerPlatformTransport({
@@ -419,12 +509,13 @@ const transport = await createFluxerPlatformTransport({
   intents: 513,
   onInstanceInfo: (instance) => {
     console.log(instance.isSelfHosted, instance.apiCodeVersion, instance.capabilities);
-  },
-  parseMessageEvent: defaultParseMessageEvent
+  }
 });
 
 const client = new FluxerClient(transport);
 ```
+
+`createFluxerPlatformTransport(...)` uses the built-in `defaultParseMessageEvent(...)` parser unless you override `parseMessageEvent` explicitly.
 
 ## Progress
 
@@ -432,7 +523,7 @@ Current state is the SDK foundation layer:
 
 - Command parsing and bot lifecycle are in place
 - The client is now transport-driven instead of hard-coded to console output
-- `MockTransport` supports local development while the real Fluxer transport is built
+- `MockTransport` supports local development and deterministic tests alongside the current REST and gateway transports
 - Middleware, guard, and hook execution now exist as first-class bot framework features
 - Modules and declarative permission policies now exist as first-class composition tools
 - Build output and command parsing are now deterministic and test-backed
@@ -449,10 +540,10 @@ This is still not a production framework. The biggest missing pieces are:
 
 - More gateway event payload normalization across the remaining Fluxer surface
 - Dedicated attachment lifecycle APIs beyond message-send serialization
-- Richer permissions and more advanced command routing
-- Automated release workflow and a stable API contract progression beyond alpha
+- Broader REST resource coverage beyond bootstrap and outbound message sending
+- Stable API guarantees and release progression beyond alpha
 
 ## Next steps
 
-- Expand gateway event coverage and attachment/payload lifecycle APIs
-- Tighten release workflow automation and continue toward beta-level API stability
+- Expand gateway event coverage, REST surface area, and attachment/payload lifecycle APIs
+- Keep tightening runtime contracts and move toward beta-level API stability

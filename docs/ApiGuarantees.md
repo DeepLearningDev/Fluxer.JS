@@ -11,6 +11,10 @@ The following surfaces are intended for package consumers:
 - documented bot/client abstractions like `FluxerBot`, `FluxerClient`, transports, plugins, and testing helpers
 - documented error types and event contracts referenced from the README and docs
 
+For the current alpha, "public API" means "intended for consumers and documented," not "locked against change." The stability promise is still evolving until a later beta/stable release.
+
+Examples, README snippets, and release docs are meant to describe the intended consumer path, but the supported runtime surface is still defined by documented package-root exports and the behavioral notes attached to them.
+
 ## Not guaranteed as public API
 
 The following are not considered stable package contracts:
@@ -19,6 +23,7 @@ The following are not considered stable package contracts:
 - object shapes or helper functions that are not exported from `src/index.ts`
 - test-only helpers that are not part of the documented public surface
 - undocumented private/protected implementation details
+- release workflow files, CI implementation details, and packaging internals
 
 ## Alpha compatibility stance
 
@@ -27,6 +32,8 @@ During the alpha phase:
 - documented public APIs are expected to trend toward stability, but may still change
 - changes that materially improve runtime trustworthiness or developer ergonomics can still reshape public APIs
 - meaningful breaking changes should be called out in the changelog and README notes
+- some currently exported surfaces may still be narrowed, renamed, or reorganized before beta if they are found to be too broad or poorly shaped
+- mock-first testing helpers are public and supported for alpha use, but they should not be treated as a live-platform protocol guarantee
 
 ## What counts as a breaking change
 

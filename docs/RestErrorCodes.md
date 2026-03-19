@@ -10,6 +10,7 @@ Each instance includes:
 - `code`
 - `retryable`
 - `status?`
+- `retryAfterMs?`
 - `details?`
 
 ## Shared Fields
@@ -23,6 +24,12 @@ This does not guarantee an automatic retry. It only classifies the failure.
 ### `status`
 
 Optional HTTP status code for response-based failures.
+
+### `retryAfterMs`
+
+Optional retry hint for rate-limit failures.
+
+When present, this is the transport's best-effort delay recommendation in milliseconds before retrying the request.
 
 ### `details`
 
@@ -128,6 +135,38 @@ Details:
 Typical fix:
 
 - inspect auth, permissions, payload validity, or server behavior depending on the status code
+
+### `REST_RATE_LIMITED`
+
+Meaning:
+
+- the request completed with HTTP `429`, and the transport extracted retry metadata from headers or the response body when available
+
+Retryable:
+
+- `true`
+
+Details:
+
+```ts
+{
+  method: "POST";
+  url: string;
+  channelId: string;
+  statusText: string;
+  responseBody?: string;
+  retryAfterMs?: number;
+  retryAfterSource?: "header" | "reset_after" | "body";
+  bucket?: string;
+  global?: boolean;
+}
+```
+
+Typical fix:
+
+- wait at least `retryAfterMs` when present before retrying
+- inspect instance-specific rate-limit headers or body metadata if `retryAfterMs` is absent
+- avoid treating rate limits as generic permission or payload failures
 
 ## Practical Usage
 

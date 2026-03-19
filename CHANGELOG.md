@@ -8,14 +8,26 @@ with pre-release channels while the framework is not yet stable.
 
 ## [Unreleased]
 
-### Added
-
-- ESLint-based linting and GitHub Actions workflows for CI and release verification
-
 ### Planned
 
 - Remaining gateway normalization across the broader Fluxer surface
 - Release-channel progression from alpha to beta once the runtime and packaging surface are more stable
+
+## [0.1.0-alpha.1] - 2026-03-18
+
+### Added
+
+- `FluxerTestRuntime.waitForSentMessage(...)` for asserting against the real outbound transport path in tests
+
+### Changed
+
+- `createFluxerPlatformTransport(...)` now defaults to the built-in message parser unless `parseMessageEvent` is overridden
+- README and release docs now state the alpha caveats, ESM-only package format, Node `>=20` requirement, and current migration/plugin expectations more explicitly
+
+### Fixed
+
+- npm packaging metadata now includes the built `dist/` output, bundled docs, and changelog in the release tarball
+- release-facing docs and package metadata now reflect the current alpha maturity more accurately
 
 ## [0.1.0-alpha.0] - 2026-03-18
 

@@ -81,6 +81,28 @@ export class RestTransport extends BaseTransport {
 
     if (!response.ok) {
       const responseBody = await safeReadResponseText(response);
+      if (response.status === 429) {
+        const rateLimit = resolveRateLimitMetadata(response, responseBody);
+        throw new RestTransportError({
+          message: "RestTransport is rate limited and should be retried later.",
+          code: "REST_RATE_LIMITED",
+          status: response.status,
+          retryable: true,
+          retryAfterMs: rateLimit.retryAfterMs,
+          details: {
+            method: "POST",
+            url: requestUrl,
+            channelId: payload.channelId,
+            statusText: response.statusText,
+            responseBody,
+            retryAfterMs: rateLimit.retryAfterMs,
+            retryAfterSource: rateLimit.source,
+            bucket: rateLimit.bucket,
+            global: rateLimit.global
+          }
+        });
+      }
+
       throw new RestTransportError({
         message: `RestTransport failed to send message: ${response.status} ${response.statusText}`,
         code: "REST_HTTP_ERROR",
@@ -153,6 +175,110 @@ async function safeReadResponseText(response: Response): Promise<string | undefi
   } catch {
     return undefined;
   }
+}
+
+function resolveRateLimitMetadata(
+  response: Response,
+  responseBody?: string
+): {
+  retryAfterMs?: number;
+  source?: "header" | "reset_after" | "body";
+  bucket?: string;
+  global?: boolean;
+} {
+  const retryAfterHeader = response.headers.get("retry-after");
+  const resetAfterHeader = response.headers.get("x-ratelimit-reset-after");
+  const bucket = response.headers.get("x-ratelimit-bucket") ?? undefined;
+  const parsedBody = parseRateLimitBody(responseBody);
+
+  if (retryAfterHeader) {
+    const retryAfterMs = parseRetryAfterHeader(retryAfterHeader);
+    if (retryAfterMs !== undefined) {
+      return {
+        retryAfterMs,
+        source: "header",
+        bucket,
+        global: parsedBody?.global
+      };
+    }
+  }
+
+  if (resetAfterHeader) {
+    const seconds = Number(resetAfterHeader);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return {
+        retryAfterMs: Math.round(seconds * 1000),
+        source: "reset_after",
+        bucket,
+        global: parsedBody?.global
+      };
+    }
+  }
+
+  if (parsedBody?.retryAfterMs !== undefined) {
+    return {
+      retryAfterMs: parsedBody.retryAfterMs,
+      source: "body",
+      bucket,
+      global: parsedBody.global
+    };
+  }
+
+  return {
+    bucket,
+    global: parsedBody?.global
+  };
+}
+
+function parseRetryAfterHeader(value: string): number | undefined {
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.round(seconds * 1000);
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return undefined;
+  }
+
+  return Math.max(0, timestamp - Date.now());
+}
+
+function parseRateLimitBody(
+  responseBody?: string
+): { retryAfterMs?: number; global?: boolean } | undefined {
+  if (!responseBody) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(responseBody) as {
+      retry_after?: unknown;
+      retry_after_ms?: unknown;
+      global?: unknown;
+    };
+
+    if (!parsed || typeof parsed !== "object") {
+      return undefined;
+    }
+
+    const retryAfterMs = typeof parsed.retry_after_ms === "number"
+      ? normalizeRetryAfterMs(parsed.retry_after_ms)
+      : typeof parsed.retry_after === "number"
+        ? normalizeRetryAfterMs(parsed.retry_after * 1000)
+        : undefined;
+
+    return {
+      retryAfterMs,
+      global: typeof parsed.global === "boolean" ? parsed.global : undefined
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeRetryAfterMs(value: number): number | undefined {
+  return Number.isFinite(value) && value >= 0 ? Math.round(value) : undefined;
 }
 
 function createMultipartRequestBody(

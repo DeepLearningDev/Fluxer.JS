@@ -51,6 +51,7 @@ export class GatewayProtocolError extends GatewayTransportError {
 export class RestTransportError extends FluxerError {
   public readonly retryable: boolean;
   public readonly status?: number;
+  public readonly retryAfterMs?: number;
   public readonly details?: Record<string, unknown>;
 
   public constructor(options: {
@@ -58,11 +59,13 @@ export class RestTransportError extends FluxerError {
     code: string;
     retryable?: boolean;
     status?: number;
+    retryAfterMs?: number;
     details?: Record<string, unknown>;
   }) {
     super(options.message, options.code);
     this.retryable = options.retryable ?? false;
     this.status = options.status;
+    this.retryAfterMs = options.retryAfterMs;
     this.details = options.details;
   }
 }

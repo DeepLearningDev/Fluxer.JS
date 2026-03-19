@@ -30,7 +30,7 @@ export interface CreateFluxerPlatformTransportOptions {
   properties?: Record<string, string>;
   presence?: Record<string, unknown>;
   webSocketFactory?: (url: string, protocols?: string | string[]) => WebSocket;
-  parseMessageEvent: FluxerGatewayTransportOptions["parseMessageEvent"];
+  parseMessageEvent?: FluxerGatewayTransportOptions["parseMessageEvent"];
 }
 
 export async function createFluxerPlatformTransport(
@@ -104,7 +104,7 @@ export async function createFluxerPlatformTransport(
       },
       webSocketFactory: options.webSocketFactory,
       parseDispatchEvent: defaultParseDispatchEvent,
-      parseMessageEvent: options.parseMessageEvent
+      parseMessageEvent: options.parseMessageEvent ?? defaultParseMessageEvent
     }),
     outbound: new RestTransport({
       baseUrl: instanceInfo.apiBaseUrl,

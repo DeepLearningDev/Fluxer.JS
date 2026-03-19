@@ -2,6 +2,12 @@
 
 `Fluxer.JS` already supports runtime plugins. This document defines how plugin packages should be named, scoped, documented, and versioned as the ecosystem grows.
 
+Current status:
+
+- plugin installation is part of the public core API today
+- `createEssentialsPlugin()` is currently bundled in the core package
+- separate official plugin packages are not published yet, so this document is a convention guide for the current alpha rather than a list of already-available packages
+
 ## Naming
 
 Recommended package naming:
@@ -28,6 +34,7 @@ Plugin packages should avoid:
 - deep-import requirements into `Fluxer.JS` internals
 - side-effect-only installs
 - undocumented global state
+- depending on alpha-only implementation quirks that are not documented in the package-root API or current docs
 
 ## Runtime contract
 
@@ -60,12 +67,13 @@ Recommended compatibility policy:
 Recommended plugin quality bar:
 
 - use `FluxerTestRuntime` for command and event tests
+- treat `FluxerTestRuntime` as a framework/runtime harness, not a substitute for any plugin-specific live instance validation you may still need
 - avoid relying on live network behavior for core plugin tests
 - test module/plugin installation paths and any capability guards explicitly
 
 ## Official plugin direction
 
-The likely first official plugin packages should be:
+If official plugin packages are split out later, the likely first candidates are:
 
 - essentials
 - moderation

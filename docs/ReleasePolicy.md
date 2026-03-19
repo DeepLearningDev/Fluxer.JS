@@ -2,10 +2,11 @@
 
 `Fluxer.JS` is currently in the `alpha` channel.
 
-The package version is now `0.1.0-alpha.0`, which reflects two things:
+The package version is now `0.1.0-alpha.1`, which reflects two things:
 
 - the framework is intentionally usable for real experimentation
 - the public API is not yet locked to stable compatibility expectations
+- release verification proves package quality gates, not full protocol completeness
 
 ## Release channels
 
@@ -25,6 +26,14 @@ Alpha releases are appropriate for:
 - early adopters
 - framework experimentation
 - internal bots where the team is comfortable upgrading with the changelog in hand
+
+Current alpha caveats:
+
+- the package is ESM-only
+- Node `>=20` is required
+- the runtime is test-backed, but the Fluxer gateway lifecycle contract is still partially inferred from Discord-compatible guidance while dedicated Fluxer lifecycle docs remain incomplete
+- the REST layer is currently focused on bootstrap/discovery and outbound message sending rather than a broad full-platform client
+- REST rate limits are surfaced as typed errors with retry metadata when available, but automatic retry/backoff is not implemented yet
 
 ### Beta
 
@@ -69,13 +78,14 @@ Before publishing, the repo should pass:
 - `npm run check`
 - `npm test`
 - `npm run build`
+- `npm run smoke:minimal`
 - `npm run pack:dry-run`
 
 The package now exposes `npm run release:check` and runs it automatically through `prepublishOnly`.
 
 These checks are also enforced in GitHub Actions:
 
-- `.github/workflows/ci.yml` runs lint plus `release:check` on pushes and pull requests
+- `.github/workflows/ci.yml` runs `release:check` on pushes and pull requests, and also runs `lint` as a separate workflow step
 - `.github/workflows/release-verify.yml` runs the same release verification path on version tags and manual release verification runs
 
 ## Changelog expectations

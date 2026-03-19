@@ -146,23 +146,7 @@ test("runs middleware before executing commands", async () => {
 });
 
 test("blocks commands when permission guards fail", async () => {
-  const transport = new MockTransport();
-  const client = new FluxerClient(transport);
-  const replies: Array<Omit<SendMessagePayload, "channelId">> = [];
-
-  client.sendMessage = async (_channelId, message) => {
-    if (typeof message === "string") {
-      replies.push({ content: message });
-      return;
-    }
-
-    if ("toJSON" in message && typeof message.toJSON === "function") {
-      replies.push(message.toJSON());
-      return;
-    }
-
-    replies.push(message as Omit<SendMessagePayload, "channelId">);
-  };
+  const runtime = new FluxerTestRuntime();
 
   const bot = new FluxerBot({
     name: "TestBot",
@@ -184,11 +168,17 @@ test("blocks commands when permission guards fail", async () => {
 
   bot.command(restrictedCommand);
 
-  client.registerBot(bot);
-  await client.connect();
-  await transport.injectMessage(createMessage("!admin"));
+  runtime.registerBot(bot);
+  await runtime.connect();
 
-  assert.deepEqual(replies, [{ content: "No access." }]);
+  const replyPromise = runtime.waitForSentMessage({
+    filter: (payload) => payload.channelId === "general"
+  });
+  await runtime.injectMessage(createMessage("!admin"));
+  const reply = await replyPromise;
+
+  assert.equal(reply.channelId, "general");
+  assert.equal(reply.content, "No access.");
 });
 
 test("installs module commands once even if the module is re-used", async () => {
@@ -499,8 +489,7 @@ test("creates platform transport from provided discovery and reports instance in
     },
     onInstanceInfo: (instanceInfo) => {
       receivedInstanceInfo = instanceInfo;
-    },
-    parseMessageEvent: () => null
+    }
   });
 
   assert.ok(transport);
@@ -855,6 +844,96 @@ test("collects messages until the max is reached", async () => {
   );
 });
 
+test("collectors stop on idle timeout after collecting matching messages", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  await client.connect();
+
+  const collector = client.createMessageCollector({
+    channelId: "general",
+    idleMs: 10
+  });
+
+  await transport.injectMessage(createMessage("first"));
+
+  const result = await collector.wait();
+  assert.equal(result.reason, "idle");
+  assert.deepEqual(
+    result.collected.map((message) => message.content),
+    ["first"]
+  );
+});
+
+test("collectors stop on abort signals", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const controller = new AbortController();
+
+  await client.connect();
+
+  const collector = client.createMessageCollector({
+    channelId: "general",
+    signal: controller.signal
+  });
+
+  await transport.injectMessage(createMessage("first"));
+  controller.abort();
+
+  const result = await collector.wait();
+  assert.equal(result.reason, "abort");
+  assert.deepEqual(
+    result.collected.map((message) => message.content),
+    ["first"]
+  );
+});
+
+test("waitForMessage ignores bot messages by default and can opt in", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  await client.connect();
+
+  const nonBotWait = client.waitForMessage({
+    channelId: "general",
+    timeoutMs: 1000
+  });
+
+  await transport.injectMessage(createMessage("bot ping", {
+    id: "msg_bot",
+    author: {
+      id: "bot_1",
+      username: "helperbot",
+      isBot: true
+    }
+  }));
+
+  await transport.injectMessage(createMessage("human ping", {
+    id: "msg_human"
+  }));
+
+  const humanMessage = await nonBotWait;
+  assert.equal(humanMessage.id, "msg_human");
+
+  const botWait = client.waitForMessage({
+    channelId: "general",
+    includeBots: true,
+    timeoutMs: 1000
+  });
+
+  await transport.injectMessage(createMessage("bot yes", {
+    id: "msg_bot_yes",
+    author: {
+      id: "bot_2",
+      username: "relaybot",
+      isBot: true
+    }
+  }));
+
+  const botMessage = await botWait;
+  assert.equal(botMessage.id, "msg_bot_yes");
+});
+
 test("supports conversational command replies through awaitReply", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
@@ -903,6 +982,110 @@ test("supports conversational command replies through awaitReply", async () => {
     { content: "Reply with yes to confirm." },
     { content: "confirmed:yes" }
   ]);
+});
+
+test("awaitReply defaults to the invoking author and channel", async () => {
+  const runtime = new FluxerTestRuntime();
+  const bot = new FluxerBot({
+    name: "ConversationBot",
+    prefix: "!"
+  });
+
+  bot.command({
+    name: "confirm",
+    execute: async ({ reply, awaitReply }) => {
+      await reply("Reply with yes to confirm.");
+      const response = await awaitReply({
+        timeoutMs: 1000,
+        filter: (message) => message.content.toLowerCase() === "yes"
+      });
+      await reply(`confirmed:${response.id}`);
+    }
+  });
+
+  runtime.registerBot(bot);
+  await runtime.connect();
+
+  const promptPromise = runtime.waitForSentMessage({
+    filter: (payload) => payload.content === "Reply with yes to confirm."
+  });
+  const confirmationPromise = runtime.waitForSentMessage({
+    filter: (payload) => typeof payload.content === "string" && payload.content.startsWith("confirmed:")
+  });
+
+  const commandPromise = runtime.injectMessage(runtime.createMessage("!confirm", {
+    id: "msg_command",
+    author: {
+      id: "user_confirm",
+      username: "fluxguy"
+    },
+    channel: {
+      id: "general",
+      name: "general",
+      type: "text"
+    }
+  }));
+
+  await promptPromise;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  await runtime.injectMessage(runtime.createMessage("yes", {
+    id: "msg_wrong_author",
+    author: {
+      id: "user_other",
+      username: "otherguy"
+    },
+    channel: {
+      id: "general",
+      name: "general",
+      type: "text"
+    }
+  }));
+
+  await runtime.injectMessage(runtime.createMessage("yes", {
+    id: "msg_wrong_channel",
+    author: {
+      id: "user_confirm",
+      username: "fluxguy"
+    },
+    channel: {
+      id: "random",
+      name: "random",
+      type: "text"
+    }
+  }));
+
+  await runtime.injectMessage(runtime.createMessage("yes", {
+    id: "msg_bot",
+    author: {
+      id: "bot_reply",
+      username: "helperbot",
+      isBot: true
+    },
+    channel: {
+      id: "general",
+      name: "general",
+      type: "text"
+    }
+  }));
+
+  await runtime.injectMessage(runtime.createMessage("yes", {
+    id: "msg_valid_reply",
+    author: {
+      id: "user_confirm",
+      username: "fluxguy"
+    },
+    channel: {
+      id: "general",
+      name: "general",
+      type: "text"
+    }
+  }));
+
+  const confirmation = await confirmationPromise;
+  await commandPromise;
+  assert.equal(confirmation.channelId, "general");
+  assert.equal(confirmation.content, "confirmed:msg_valid_reply");
 });
 
 test("matches commands case-insensitively by default", async () => {
@@ -2592,6 +2775,43 @@ test("emits typed diagnostics for rest http failures", async () => {
     assert.equal(error.retryable, false);
     assert.equal(error.details?.statusText, "Forbidden");
     assert.equal(error.details?.responseBody, "denied");
+    return true;
+  });
+});
+
+test("emits typed diagnostics for rest rate limits with retry metadata", async () => {
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async () =>
+      new Response(JSON.stringify({
+        retry_after: 1.5,
+        global: true
+      }), {
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: {
+          "content-type": "application/json",
+          "retry-after": "2",
+          "x-ratelimit-bucket": "messages:general"
+        }
+      })
+  });
+
+  await assert.rejects(async () => {
+    await transport.sendMessage({
+      channelId: "general",
+      content: "hello"
+    });
+  }, (error: unknown) => {
+    assert.ok(error instanceof RestTransportError);
+    assert.equal(error.code, "REST_RATE_LIMITED");
+    assert.equal(error.status, 429);
+    assert.equal(error.retryable, true);
+    assert.equal(error.retryAfterMs, 2000);
+    assert.equal(error.details?.retryAfterMs, 2000);
+    assert.equal(error.details?.retryAfterSource, "header");
+    assert.equal(error.details?.bucket, "messages:general");
+    assert.equal(error.details?.global, true);
     return true;
   });
 });
