@@ -1,5 +1,5 @@
 import { fetchGatewayInformation, fetchInstanceDiscoveryDocument } from "./Discovery.js";
-import { FluxerError, PlatformBootstrapError } from "./errors.js";
+import { PlatformBootstrapError } from "./errors.js";
 import { GatewayTransport } from "./GatewayTransport.js";
 import { createInstanceInfo } from "./Instance.js";
 import { PlatformTransport } from "./PlatformTransport.js";
@@ -63,6 +63,18 @@ export async function createFluxerPlatformTransport(
   assertPlatformTransportCapabilities(instanceInfo, options.debug);
 
   const gateway = await fetchGatewayInfoForPlatformTransport(instanceInfo, options);
+
+  options.debug?.({
+    scope: "transport",
+    event: "platform_transport_bootstrapped",
+    level: "info",
+    timestamp: new Date().toISOString(),
+    data: {
+      instanceUrl: instanceInfo.instanceUrl,
+      apiBaseUrl: instanceInfo.apiBaseUrl,
+      gatewayUrl: gateway.url
+    }
+  });
 
   return new PlatformTransport({
     inbound: new GatewayTransport({
@@ -202,14 +214,19 @@ function assertPlatformTransportCapabilities(
     timestamp: new Date().toISOString(),
     data: {
       instanceUrl: instanceInfo.instanceUrl,
-      missingCapabilities: missingCapabilities.join(",")
+      missingCapabilities
     }
   });
 
-  throw new FluxerError(
-    `This Fluxer instance does not support platform transport bootstrap. Missing capabilities: ${missingCapabilities.join(", ")}.`,
-    "INSTANCE_CAPABILITY_UNSUPPORTED"
-  );
+  throw createPlatformBootstrapError({
+    message: `This Fluxer instance does not support platform transport bootstrap. Missing capabilities: ${missingCapabilities.join(", ")}.`,
+    code: "INSTANCE_CAPABILITY_UNSUPPORTED",
+    retryable: false,
+    details: {
+      instanceUrl: instanceInfo.instanceUrl,
+      missingCapabilities
+    }
+  });
 }
 
 function createPlatformBootstrapError(options: {
