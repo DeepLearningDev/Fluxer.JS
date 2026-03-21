@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { FluxerClient } from '../src/core/Client.js';
 import { createInstanceInfo, detectInstanceCapabilities } from '../src/core/Instance.js';
 import { defaultParseDispatchEvent, createFluxerPlatformTransport } from '../src/core/createPlatformTransport.js';
-import { GatewayProtocolError, GatewayTransportError } from '../src/core/errors.js';
+import { FluxerError, GatewayProtocolError, GatewayTransportError, PlatformBootstrapError } from '../src/core/errors.js';
 import { GatewayTransport } from '../src/core/GatewayTransport.js';
 import { MockTransport } from '../src/core/MockTransport.js';
 class FakeWebSocket {
@@ -168,6 +168,175 @@ test("creates platform transport from provided discovery and reports instance in
   assert.equal(receivedInstanceInfo?.isSelfHosted, true);
   assert.equal(receivedInstanceInfo?.apiCodeVersion, 7);
   assert.ok(debugEvents.includes("instance_detected"));
+});
+
+test("emits typed diagnostics when discovery bootstrap fails", async () => {
+  const debugEvents: string[] = [];
+
+  await assert.rejects(async () => {
+    await createFluxerPlatformTransport({
+      auth: { token: "bot-token" },
+      instanceUrl: "https://fluxer.local",
+      fetchImpl: async () => {
+        throw new Error("network down");
+      },
+      debug: (event) => {
+        debugEvents.push(event.event);
+      }
+    });
+  }, (error: unknown) => {
+    assert.ok(error instanceof PlatformBootstrapError);
+    assert.equal(error.code, "PLATFORM_DISCOVERY_FAILED");
+    assert.equal(error.retryable, true);
+    assert.equal(error.details?.instanceUrl, "https://fluxer.local");
+    assert.equal(error.details?.message, "network down");
+    return true;
+  });
+
+  assert.ok(debugEvents.includes("platform_transport_discovery_failed"));
+});
+
+test("emits typed diagnostics when gateway info bootstrap fails", async () => {
+  const debugEvents: string[] = [];
+
+  const discovery = {
+    api_code_version: 7,
+    endpoints: {
+      api: "https://fluxer.local/api",
+      api_client: "https://fluxer.local/client-api",
+      api_public: "https://fluxer.local/public-api",
+      gateway: "wss://fluxer.local/gateway",
+      media: "https://fluxer.local/media",
+      static_cdn: "https://fluxer.local/cdn",
+      marketing: "https://fluxer.local",
+      admin: "https://fluxer.local/admin",
+      invite: "https://fluxer.local/invite",
+      gift: "https://fluxer.local/gift",
+      webapp: "https://fluxer.local/app"
+    },
+    features: {
+      gateway_bot: true
+    }
+  } as const;
+
+  await assert.rejects(async () => {
+    await createFluxerPlatformTransport({
+      auth: { token: "bot-token" },
+      instanceUrl: "https://fluxer.local",
+      discovery,
+      fetchImpl: async () =>
+        new Response("gateway unavailable", {
+          status: 503,
+          statusText: "Service Unavailable"
+        }),
+      debug: (event) => {
+        debugEvents.push(event.event);
+      }
+    });
+  }, (error: unknown) => {
+    assert.ok(error instanceof PlatformBootstrapError);
+    assert.equal(error.code, "PLATFORM_GATEWAY_INFO_FAILED");
+    assert.equal(error.retryable, true);
+    assert.equal(error.details?.instanceUrl, "https://fluxer.local");
+    assert.equal(error.details?.apiBaseUrl, "https://fluxer.local/api");
+    assert.match(String(error.details?.message), /503 Service Unavailable/);
+    return true;
+  });
+
+  assert.ok(debugEvents.includes("instance_detected"));
+  assert.ok(debugEvents.includes("platform_transport_gateway_info_failed"));
+});
+
+test("blocks platform transport bootstrap when discovery lacks a gateway endpoint", async () => {
+  let fetchCalls = 0;
+  const debugEvents: string[] = [];
+
+  const discovery = {
+    api_code_version: 7,
+    endpoints: {
+      api: "https://fluxer.local/api",
+      api_client: "https://fluxer.local/client-api",
+      api_public: "https://fluxer.local/public-api",
+      gateway: "",
+      media: "https://fluxer.local/media",
+      static_cdn: "https://fluxer.local/cdn",
+      marketing: "https://fluxer.local",
+      admin: "https://fluxer.local/admin",
+      invite: "https://fluxer.local/invite",
+      gift: "https://fluxer.local/gift",
+      webapp: "https://fluxer.local/app"
+    },
+    features: {
+      gateway_bot: true
+    }
+  } as const;
+
+  await assert.rejects(async () => {
+    await createFluxerPlatformTransport({
+      auth: { token: "bot-token" },
+      instanceUrl: "https://fluxer.local",
+      discovery,
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        throw new Error("Gateway fetch should not be attempted.");
+      },
+      debug: (event) => {
+        debugEvents.push(event.event);
+      }
+    });
+  }, (error: unknown) => {
+    assert.ok(error instanceof FluxerError);
+    assert.equal(error.code, "INSTANCE_CAPABILITY_UNSUPPORTED");
+    assert.match(error.message, /Missing capabilities: gateway/);
+    return true;
+  });
+
+  assert.equal(fetchCalls, 0);
+  assert.ok(debugEvents.includes("instance_detected"));
+  assert.ok(debugEvents.includes("platform_transport_bootstrap_blocked"));
+});
+
+test("blocks platform transport bootstrap when discovery lacks bot gateway support", async () => {
+  let fetchCalls = 0;
+
+  const discovery = {
+    api_code_version: 7,
+    endpoints: {
+      api: "https://fluxer.local/api",
+      api_client: "https://fluxer.local/client-api",
+      api_public: "https://fluxer.local/public-api",
+      gateway: "wss://fluxer.local/gateway",
+      media: "https://fluxer.local/media",
+      static_cdn: "https://fluxer.local/cdn",
+      marketing: "https://fluxer.local",
+      admin: "https://fluxer.local/admin",
+      invite: "https://fluxer.local/invite",
+      gift: "https://fluxer.local/gift",
+      webapp: "https://fluxer.local/app"
+    },
+    features: {
+      gateway_bot: false
+    }
+  } as const;
+
+  await assert.rejects(async () => {
+    await createFluxerPlatformTransport({
+      auth: { token: "bot-token" },
+      instanceUrl: "https://fluxer.local",
+      discovery,
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        throw new Error("Gateway fetch should not be attempted.");
+      }
+    });
+  }, (error: unknown) => {
+    assert.ok(error instanceof FluxerError);
+    assert.equal(error.code, "INSTANCE_CAPABILITY_UNSUPPORTED");
+    assert.match(error.message, /Missing capabilities: gatewayBot/);
+    return true;
+  });
+
+  assert.equal(fetchCalls, 0);
 });
 
 test("maps gateway dispatch events onto client events", async () => {

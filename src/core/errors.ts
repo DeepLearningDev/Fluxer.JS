@@ -70,6 +70,22 @@ export class RestTransportError extends FluxerError {
   }
 }
 
+export class PlatformBootstrapError extends FluxerError {
+  public readonly retryable: boolean;
+  public readonly details?: Record<string, unknown>;
+
+  public constructor(options: {
+    message: string;
+    code: string;
+    retryable?: boolean;
+    details?: Record<string, unknown>;
+  }) {
+    super(options.message, options.code);
+    this.retryable = options.retryable ?? false;
+    this.details = options.details;
+  }
+}
+
 export class PayloadValidationError extends FluxerError {
   public readonly details?: Record<string, unknown>;
 

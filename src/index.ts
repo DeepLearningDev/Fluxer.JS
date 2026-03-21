@@ -57,6 +57,7 @@ export {
   FluxerError,
   GatewayProtocolError,
   GatewayTransportError,
+  PlatformBootstrapError,
   PayloadValidationError,
   RestTransportError,
   WaitForTimeoutError

@@ -1,4 +1,5 @@
 import { fetchGatewayInformation, fetchInstanceDiscoveryDocument } from "./Discovery.js";
+import { FluxerError, PlatformBootstrapError } from "./errors.js";
 import { GatewayTransport } from "./GatewayTransport.js";
 import { createInstanceInfo } from "./Instance.js";
 import { PlatformTransport } from "./PlatformTransport.js";
@@ -36,10 +37,7 @@ export interface CreateFluxerPlatformTransportOptions {
 export async function createFluxerPlatformTransport(
   options: CreateFluxerPlatformTransportOptions
 ): Promise<FluxerTransport> {
-  const discovery = options.discovery ?? await fetchInstanceDiscoveryDocument({
-    instanceUrl: options.instanceUrl,
-    fetchImpl: options.fetchImpl
-  });
+  const discovery = options.discovery ?? await fetchDiscoveryForPlatformTransport(options);
   const instanceInfo = createInstanceInfo({
     instanceUrl: options.instanceUrl ?? discovery.endpoints.api,
     discovery
@@ -62,12 +60,9 @@ export async function createFluxerPlatformTransport(
     }
   });
 
-  const gateway = await fetchGatewayInformation({
-    apiBaseUrl: instanceInfo.apiBaseUrl,
-    auth: options.auth,
-    fetchImpl: options.fetchImpl,
-    userAgent: options.userAgent
-  });
+  assertPlatformTransportCapabilities(instanceInfo, options.debug);
+
+  const gateway = await fetchGatewayInfoForPlatformTransport(instanceInfo, options);
 
   return new PlatformTransport({
     inbound: new GatewayTransport({
@@ -114,6 +109,116 @@ export async function createFluxerPlatformTransport(
       userAgent: options.userAgent
     })
   });
+}
+
+async function fetchDiscoveryForPlatformTransport(
+  options: CreateFluxerPlatformTransportOptions
+): Promise<FluxerInstanceDiscoveryDocument> {
+  try {
+    return await fetchInstanceDiscoveryDocument({
+      instanceUrl: options.instanceUrl,
+      fetchImpl: options.fetchImpl
+    });
+  } catch (error) {
+    const normalizedError = createPlatformBootstrapError({
+      message: "Failed to fetch the Fluxer discovery document during platform transport bootstrap.",
+      code: "PLATFORM_DISCOVERY_FAILED",
+      retryable: true,
+      details: {
+        instanceUrl: options.instanceUrl,
+        message: error instanceof Error ? error.message : "Unknown discovery bootstrap failure."
+      }
+    });
+
+    options.debug?.({
+      scope: "transport",
+      event: "platform_transport_discovery_failed",
+      level: "error",
+      timestamp: new Date().toISOString(),
+      data: normalizedError.details
+    });
+
+    throw normalizedError;
+  }
+}
+
+async function fetchGatewayInfoForPlatformTransport(
+  instanceInfo: FluxerInstanceInfo,
+  options: CreateFluxerPlatformTransportOptions
+) {
+  try {
+    return await fetchGatewayInformation({
+      apiBaseUrl: instanceInfo.apiBaseUrl,
+      auth: options.auth,
+      fetchImpl: options.fetchImpl,
+      userAgent: options.userAgent
+    });
+  } catch (error) {
+    const normalizedError = createPlatformBootstrapError({
+      message: "Failed to fetch gateway bootstrap information during platform transport creation.",
+      code: "PLATFORM_GATEWAY_INFO_FAILED",
+      retryable: true,
+      details: {
+        instanceUrl: instanceInfo.instanceUrl,
+        apiBaseUrl: instanceInfo.apiBaseUrl,
+        message: error instanceof Error ? error.message : "Unknown gateway bootstrap failure."
+      }
+    });
+
+    options.debug?.({
+      scope: "transport",
+      event: "platform_transport_gateway_info_failed",
+      level: "error",
+      timestamp: new Date().toISOString(),
+      data: normalizedError.details
+    });
+
+    throw normalizedError;
+  }
+}
+
+function assertPlatformTransportCapabilities(
+  instanceInfo: FluxerInstanceInfo,
+  debug?: FluxerDebugHandler
+): void {
+  const missingCapabilities: string[] = [];
+
+  if (!instanceInfo.capabilities.gateway) {
+    missingCapabilities.push("gateway");
+  }
+
+  if (!instanceInfo.capabilities.gatewayBot) {
+    missingCapabilities.push("gatewayBot");
+  }
+
+  if (missingCapabilities.length === 0) {
+    return;
+  }
+
+  debug?.({
+    scope: "transport",
+    event: "platform_transport_bootstrap_blocked",
+    level: "error",
+    timestamp: new Date().toISOString(),
+    data: {
+      instanceUrl: instanceInfo.instanceUrl,
+      missingCapabilities: missingCapabilities.join(",")
+    }
+  });
+
+  throw new FluxerError(
+    `This Fluxer instance does not support platform transport bootstrap. Missing capabilities: ${missingCapabilities.join(", ")}.`,
+    "INSTANCE_CAPABILITY_UNSUPPORTED"
+  );
+}
+
+function createPlatformBootstrapError(options: {
+  message: string;
+  code: string;
+  retryable: boolean;
+  details: Record<string, unknown>;
+}): PlatformBootstrapError {
+  return new PlatformBootstrapError(options);
 }
 
 export function defaultParseDispatchEvent(payload: unknown): FluxerGatewayDispatchEvent | null {
