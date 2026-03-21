@@ -170,7 +170,21 @@ test("creates platform transport from provided discovery and reports instance in
   assert.equal(fetchCalls, 1);
   assert.equal(receivedInstanceInfo?.isSelfHosted, true);
   assert.equal(receivedInstanceInfo?.apiCodeVersion, 7);
-  assert.ok(debugEvents.some((event) => event.event === "instance_detected"));
+  const detectedEvent = debugEvents.find((event) => event.event === "instance_detected");
+  assert.deepEqual(detectedEvent?.data, {
+    instanceUrl: "https://fluxer.local",
+    apiBaseUrl: "https://fluxer.local/api",
+    apiCodeVersion: 7,
+    isSelfHosted: true,
+    capabilities: [
+      "invites",
+      "media",
+      "gateway",
+      "gatewayBot",
+      "botAuth",
+      "attachments"
+    ]
+  });
   const bootstrappedEvent = debugEvents.find((event) => event.event === "platform_transport_bootstrapped");
   assert.deepEqual(bootstrappedEvent?.data, {
     instanceUrl: "https://fluxer.local",
@@ -262,7 +276,14 @@ test("emits typed diagnostics when gateway info bootstrap fails", async () => {
     return true;
   });
 
-  assert.ok(debugEvents.some((event) => event.event === "instance_detected"));
+  const detectedEvent = debugEvents.find((event) => event.event === "instance_detected");
+  assert.deepEqual(detectedEvent?.data, {
+    instanceUrl: "https://fluxer.local",
+    apiBaseUrl: "https://fluxer.local/api",
+    apiCodeVersion: 7,
+    isSelfHosted: true,
+    capabilities: ["invites", "media", "gateway", "gatewayBot", "botAuth", "attachments"]
+  });
   const debugEvent = debugEvents.find((event) => event.event === "platform_transport_gateway_info_failed");
   assert.deepEqual(debugEvent?.data, {
     instanceUrl: "https://fluxer.local",
@@ -322,7 +343,14 @@ test("blocks platform transport bootstrap when discovery lacks a gateway endpoin
   });
 
   assert.equal(fetchCalls, 0);
-  assert.ok(debugEvents.some((event) => event.event === "instance_detected"));
+  const detectedEvent = debugEvents.find((event) => event.event === "instance_detected");
+  assert.deepEqual(detectedEvent?.data, {
+    instanceUrl: "https://fluxer.local",
+    apiBaseUrl: "https://fluxer.local/api",
+    apiCodeVersion: 7,
+    isSelfHosted: true,
+    capabilities: ["invites", "media", "gatewayBot", "botAuth", "attachments"]
+  });
   const debugEvent = debugEvents.find((event) => event.event === "platform_transport_bootstrap_blocked");
   assert.deepEqual(debugEvent?.data, {
     instanceUrl: "https://fluxer.local",

@@ -53,10 +53,7 @@ export async function createFluxerPlatformTransport(
       apiBaseUrl: instanceInfo.apiBaseUrl,
       apiCodeVersion: instanceInfo.apiCodeVersion,
       isSelfHosted: instanceInfo.isSelfHosted,
-      capabilities: Object.entries(instanceInfo.capabilities)
-        .filter(([, enabled]) => enabled)
-        .map(([name]) => name)
-        .join(",")
+      capabilities: listEnabledCapabilities(instanceInfo)
     }
   });
 
@@ -236,6 +233,12 @@ function createPlatformBootstrapError(options: {
   details: Record<string, unknown>;
 }): PlatformBootstrapError {
   return new PlatformBootstrapError(options);
+}
+
+function listEnabledCapabilities(instanceInfo: FluxerInstanceInfo): string[] {
+  return Object.entries(instanceInfo.capabilities)
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name);
 }
 
 export function defaultParseDispatchEvent(payload: unknown): FluxerGatewayDispatchEvent | null {
