@@ -7,11 +7,13 @@ import type {
   FluxerAttachment,
   FluxerChannel,
   FluxerGuild,
+  FluxerGuildMember,
   FluxerListPinnedMessagesOptions,
   FluxerInstanceDiscoveryDocument,
   FluxerListMessagesOptions,
   FluxerMessage,
   FluxerPinnedMessageList,
+  FluxerRole,
   FluxerRestTransportOptions,
   FluxerSerializedMessagePayload,
   SendMessagePayload
@@ -195,6 +197,87 @@ export class RestTransport extends BaseTransport {
     }
 
     return parseRestGuild(await parseJsonResponse(response), {
+      method: "GET",
+      url: requestUrl,
+      guildId
+    });
+  }
+
+  public async fetchGuildMember(guildId: string, userId: string): Promise<FluxerGuildMember> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/guilds/${guildId}/members/${userId}`;
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "GET",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "GET",
+        url: requestUrl,
+        guildId,
+        userId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "GET",
+        url: requestUrl,
+        guildId,
+        userId
+      });
+    }
+
+    return parseRestGuildMember(await parseJsonResponse(response), {
+      method: "GET",
+      url: requestUrl,
+      guildId,
+      userId
+    });
+  }
+
+  public async listGuildRoles(guildId: string): Promise<FluxerRole[]> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/guilds/${guildId}/roles`;
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "GET",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "GET",
+        url: requestUrl,
+        guildId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "GET",
+        url: requestUrl,
+        guildId
+      });
+    }
+
+    return parseRestRoleList(await parseJsonResponse(response), {
       method: "GET",
       url: requestUrl,
       guildId
@@ -602,6 +685,139 @@ function parseRestGuild(
   };
 }
 
+function parseRestGuildMember(
+  payload: unknown,
+  context: {
+    method: string;
+    url: string;
+    guildId: string;
+    userId: string;
+  }
+): FluxerGuildMember {
+  const member = payload as {
+    nick?: string | null;
+    roles?: unknown;
+    joined_at?: string;
+    user?: {
+      id?: string;
+      username?: string;
+      global_name?: string;
+      bot?: boolean;
+    };
+  };
+
+  if (!member?.user?.id || !member.user.username || !Array.isArray(member.roles)) {
+    throw new RestTransportError({
+      message: "RestTransport received a guild member response with missing required fields.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  if (member.roles.some((roleId) => typeof roleId !== "string")) {
+    throw new RestTransportError({
+      message: "RestTransport received a guild member response with invalid role IDs.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  const joinedAt = member.joined_at ? new Date(member.joined_at) : undefined;
+  if (joinedAt && Number.isNaN(joinedAt.getTime())) {
+    throw new RestTransportError({
+      message: "RestTransport received a guild member response with an invalid join timestamp.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  return {
+    guildId: context.guildId,
+    user: {
+      id: member.user.id,
+      username: member.user.username,
+      displayName: member.user.global_name,
+      isBot: member.user.bot
+    },
+    nickname: member.nick ?? undefined,
+    roles: [...member.roles],
+    joinedAt
+  };
+}
+
+function parseRestRole(
+  payload: unknown,
+  context: {
+    method: string;
+    url: string;
+    guildId: string;
+  }
+): FluxerRole {
+  const role = payload as {
+    id?: string;
+    name?: string;
+    color?: number;
+    position?: number;
+    permissions?: string;
+  };
+
+  if (!role?.id || !role.name) {
+    throw new RestTransportError({
+      message: "RestTransport received a role response with missing required fields.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  return {
+    id: role.id,
+    guildId: context.guildId,
+    name: role.name,
+    color: role.color,
+    position: role.position,
+    permissions: role.permissions
+  };
+}
+
+function parseRestRoleList(
+  payload: unknown,
+  context: {
+    method: string;
+    url: string;
+    guildId: string;
+  }
+): FluxerRole[] {
+  if (!Array.isArray(payload)) {
+    throw new RestTransportError({
+      message: "RestTransport received a role list response with an invalid shape.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  return payload.map((role) => parseRestRole(role, context));
+}
+
 function parseRestPinnedMessageList(
   payload: unknown,
   context: {
@@ -784,6 +1000,7 @@ function createRequestFailedError(context: {
   url: string;
   channelId?: string;
   guildId?: string;
+  userId?: string;
   messageId?: string;
   error: unknown;
 }): RestTransportError {
@@ -796,6 +1013,7 @@ function createRequestFailedError(context: {
       url: context.url,
       channelId: context.channelId,
       guildId: context.guildId,
+      userId: context.userId,
       messageId: context.messageId,
       message: context.error instanceof Error ? context.error.message : String(context.error)
     }
@@ -809,6 +1027,7 @@ async function createResponseError(
     url: string;
     channelId?: string;
     guildId?: string;
+    userId?: string;
     messageId?: string;
   }
 ): Promise<RestTransportError> {
@@ -826,6 +1045,7 @@ async function createResponseError(
         url: context.url,
         channelId: context.channelId,
         guildId: context.guildId,
+        userId: context.userId,
         messageId: context.messageId,
         statusText: response.statusText,
         responseBody,
@@ -847,6 +1067,7 @@ async function createResponseError(
       url: context.url,
       channelId: context.channelId,
       guildId: context.guildId,
+      userId: context.userId,
       messageId: context.messageId,
       statusText: response.statusText,
       responseBody

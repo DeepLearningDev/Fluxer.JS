@@ -583,6 +583,8 @@ export interface FluxerTransport {
   indicateTyping(channelId: string): Promise<void>;
   fetchChannel(channelId: string): Promise<FluxerChannel>;
   fetchGuild(guildId: string): Promise<FluxerGuild>;
+  fetchGuildMember(guildId: string, userId: string): Promise<FluxerGuildMember>;
+  listGuildRoles(guildId: string): Promise<FluxerRole[]>;
   listPinnedMessages(
     channelId: string,
     options?: FluxerListPinnedMessagesOptions
@@ -776,6 +778,8 @@ export interface FluxerClientLike {
   indicateTyping?(channelId: string): Promise<void>;
   fetchChannel?(channelId: string): Promise<FluxerChannel>;
   fetchGuild?(guildId: string): Promise<FluxerGuild>;
+  fetchGuildMember?(guildId: string, userId: string): Promise<FluxerGuildMember>;
+  listGuildRoles?(guildId: string): Promise<FluxerRole[]>;
   listPinnedMessages?(
     channelId: string,
     options?: FluxerListPinnedMessagesOptions

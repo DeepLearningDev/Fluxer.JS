@@ -351,6 +351,83 @@ export class FluxerClient extends EventEmitter {
     }
   }
 
+  public async fetchGuildMember(guildId: string, userId: string): Promise<FluxerGuildMember> {
+    this.emitDebug({
+      scope: "client",
+      event: "fetch_guild_member_started",
+      level: "debug",
+      data: {
+        guildId,
+        userId
+      }
+    });
+
+    try {
+      const member = await this.#transport.fetchGuildMember(guildId, userId);
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_guild_member_succeeded",
+        level: "debug",
+        data: {
+          guildId,
+          userId,
+          roleCount: member.roles?.length ?? 0
+        }
+      });
+      return member;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Fetch guild member failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_guild_member_failed",
+        level: "error",
+        data: {
+          guildId,
+          userId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
+  public async listGuildRoles(guildId: string): Promise<FluxerRole[]> {
+    this.emitDebug({
+      scope: "client",
+      event: "list_guild_roles_started",
+      level: "debug",
+      data: {
+        guildId
+      }
+    });
+
+    try {
+      const roles = await this.#transport.listGuildRoles(guildId);
+      this.emitDebug({
+        scope: "client",
+        event: "list_guild_roles_succeeded",
+        level: "debug",
+        data: {
+          guildId,
+          count: roles.length
+        }
+      });
+      return roles;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("List guild roles failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "list_guild_roles_failed",
+        level: "error",
+        data: {
+          guildId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
   public async listPinnedMessages(
     channelId: string,
     options?: FluxerListPinnedMessagesOptions

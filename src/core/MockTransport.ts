@@ -5,12 +5,14 @@ import type {
   EditMessagePayload,
   FluxerGatewayDispatchEvent,
   FluxerGuild,
+  FluxerGuildMember,
   FluxerGatewaySession,
   FluxerGatewayStateChangeEvent,
   FluxerListPinnedMessagesOptions,
   FluxerListMessagesOptions,
   FluxerMessage,
   FluxerPinnedMessageList,
+  FluxerRole,
   SendMessagePayload
 } from "./types.js";
 import { FluxerError } from "./errors.js";
@@ -21,6 +23,8 @@ export class MockTransport extends BaseTransport {
   readonly #typingChannelIds: string[] = [];
   readonly #channels = new Map<string, FluxerChannel>();
   readonly #guilds = new Map<string, FluxerGuild>();
+  readonly #guildMembers = new Map<string, FluxerGuildMember>();
+  readonly #guildRoles = new Map<string, FluxerRole[]>();
   readonly #messageStore = new Map<string, FluxerMessage>();
   readonly #pinnedMessages = new Map<string, Date>();
   #nextMessageId = 1;
@@ -44,6 +48,19 @@ export class MockTransport extends BaseTransport {
 
   public setGuild(guild: FluxerGuild): void {
     this.#guilds.set(guild.id, { ...guild });
+  }
+
+  public setGuildMember(member: FluxerGuildMember): void {
+    this.#guildMembers.set(this.#guildMemberKey(member.guildId, member.user.id), {
+      ...member,
+      user: { ...member.user },
+      roles: member.roles ? [...member.roles] : undefined,
+      joinedAt: member.joinedAt ? new Date(member.joinedAt) : undefined
+    });
+  }
+
+  public setGuildRoles(guildId: string, roles: FluxerRole[]): void {
+    this.#guildRoles.set(guildId, roles.map((role) => ({ ...role })));
   }
 
   public pinMessage(channelId: string, messageId: string, pinnedAt: Date = new Date()): void {
@@ -114,6 +131,32 @@ export class MockTransport extends BaseTransport {
     }
 
     return { ...guild };
+  }
+
+  public async fetchGuildMember(guildId: string, userId: string): Promise<FluxerGuildMember> {
+    const member = this.#guildMembers.get(this.#guildMemberKey(guildId, userId));
+    if (!member) {
+      throw new FluxerError(
+        "MockTransport could not find the requested guild member.",
+        "MOCK_GUILD_MEMBER_NOT_FOUND"
+      );
+    }
+
+    return {
+      ...member,
+      user: { ...member.user },
+      roles: member.roles ? [...member.roles] : undefined,
+      joinedAt: member.joinedAt ? new Date(member.joinedAt) : undefined
+    };
+  }
+
+  public async listGuildRoles(guildId: string): Promise<FluxerRole[]> {
+    const roles = this.#guildRoles.get(guildId);
+    if (!roles) {
+      return [];
+    }
+
+    return roles.map((role) => ({ ...role }));
   }
 
   public async listPinnedMessages(
@@ -283,6 +326,10 @@ export class MockTransport extends BaseTransport {
 
   #messageKey(channelId: string, messageId: string): string {
     return `${channelId}:${messageId}`;
+  }
+
+  #guildMemberKey(guildId: string, userId: string): string {
+    return `${guildId}:${userId}`;
   }
 }
 

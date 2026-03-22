@@ -40,7 +40,7 @@ Important alpha caveats:
 - the published package is ESM-only
 - Node `>=20` is required
 - the gateway session/runtime layer is implemented and tested, but parts of its lifecycle still rely on Discord-compatible assumptions because Fluxer's dedicated lifecycle docs are still incomplete
-- the REST surface is still intentionally narrow, but it now covers bootstrap/discovery plus core read/write bot operations: fetch guild, fetch channel, list messages, list pinned messages, indicate typing, and send/fetch/edit/delete messages
+- the REST surface is still intentionally narrow, but it now covers bootstrap/discovery plus core read/write bot operations: fetch guild, fetch guild members, list guild roles, fetch channel, list messages, list pinned messages, indicate typing, and send/fetch/edit/delete messages
 - real-instance bootstrap through `createFluxerPlatformTransport(...)` now surfaces typed `PlatformBootstrapError` failures for discovery, gateway-info, and unsupported-capability startup paths
 - the exported low-level discovery helpers surface typed `DiscoveryError` failures for request, HTTP, and invalid-response cases
 - release verification includes both a built-example smoke test and an installed-package smoke test through the published entrypoint
@@ -312,6 +312,8 @@ Rich messages are now builder-driven:
 - `client.sendMessage(...)` and `context.reply(...)` accept either strings or rich payloads
 - `client.listMessages(...)` exposes the current channel message listing surface with `limit`, `before`, `after`, and `around`
 - `client.fetchGuild(...)` exposes the current guild fetch surface
+- `client.fetchGuildMember(...)` exposes the current guild-member read surface
+- `client.listGuildRoles(...)` exposes the current guild role-list surface
 - `client.fetchChannel(...)` exposes the current channel fetch surface
 - `client.listPinnedMessages(...)` exposes the current pinned-message read surface with `limit`, `before`, `items`, and `hasMore`
 - `client.indicateTyping(...)` exposes the current typing indicator surface
@@ -560,7 +562,7 @@ This is still not a production framework. The biggest missing pieces are:
 
 - More gateway event payload normalization across the remaining Fluxer surface
 - Dedicated attachment lifecycle APIs beyond message-send serialization
-- Broader REST resource coverage beyond the current bootstrap, channel-read, and core message operations
+- Broader REST resource coverage beyond the current bootstrap, guild/channel/member reads, and core message operations
 - Stable API guarantees and release progression beyond alpha
 
 ## Next steps

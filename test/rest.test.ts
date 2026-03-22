@@ -72,6 +72,59 @@ function createRestGuildResponse(overrides: Partial<{
   });
 }
 
+function createRestGuildMemberResponse(overrides: Partial<{
+  nick: string | null;
+  roles: string[];
+  joined_at: string;
+  user: {
+    id: string;
+    username: string;
+    global_name?: string;
+    bot?: boolean;
+  };
+}> = {}): Response {
+  return new Response(JSON.stringify({
+    nick: "Flux",
+    roles: ["role_1", "role_2"],
+    joined_at: "2026-03-18T21:00:00.000Z",
+    user: {
+      id: "user_42",
+      username: "fluxguy",
+      global_name: "Flux Guy"
+    },
+    ...overrides
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json"
+    }
+  });
+}
+
+function createRestRoleListResponse(): Response {
+  return new Response(JSON.stringify([
+    {
+      id: "role_2",
+      name: "Moderator",
+      color: 255,
+      position: 2,
+      permissions: "1234"
+    },
+    {
+      id: "role_1",
+      name: "Member",
+      color: 0,
+      position: 1,
+      permissions: "5678"
+    }
+  ]), {
+    status: 200,
+    headers: {
+      "content-type": "application/json"
+    }
+  });
+}
+
 function createRestMessageListResponse(): Response {
   return new Response(JSON.stringify([
     {
@@ -430,6 +483,96 @@ test("fetches guilds through rest transport", async () => {
   });
 });
 
+test("fetches guild members through rest transport", async () => {
+  const requests: string[] = [];
+
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return createRestGuildMemberResponse({
+        user: {
+          id: "user_99",
+          username: "modbot",
+          bot: true
+        },
+        roles: ["role_mod"],
+        nick: null
+      });
+    }
+  });
+
+  const member = await transport.fetchGuildMember("guild_42", "user_99");
+
+  assert.equal(requests[0], "https://fluxer.local/api/v1/guilds/guild_42/members/user_99");
+  assert.deepEqual(member, {
+    guildId: "guild_42",
+    user: {
+      id: "user_99",
+      username: "modbot",
+      displayName: undefined,
+      isBot: true
+    },
+    nickname: undefined,
+    roles: ["role_mod"],
+    joinedAt: new Date("2026-03-18T21:00:00.000Z")
+  });
+});
+
+test("rejects invalid guild member responses from rest transport", async () => {
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async () =>
+      createRestGuildMemberResponse({
+        roles: ["role_1", 2 as unknown as string]
+      })
+  });
+
+  await assert.rejects(async () => {
+    await transport.fetchGuildMember("guild_42", "user_99");
+  }, (error: unknown) => {
+    assert.ok(error instanceof RestTransportError);
+    assert.equal(error.code, "REST_RESPONSE_INVALID");
+    assert.equal(error.details?.guildId, "guild_42");
+    assert.equal(error.details?.userId, "user_99");
+    return true;
+  });
+});
+
+test("lists guild roles through rest transport", async () => {
+  const requests: string[] = [];
+
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return createRestRoleListResponse();
+    }
+  });
+
+  const roles = await transport.listGuildRoles("guild_42");
+
+  assert.equal(requests[0], "https://fluxer.local/api/v1/guilds/guild_42/roles");
+  assert.deepEqual(roles, [
+    {
+      id: "role_2",
+      guildId: "guild_42",
+      name: "Moderator",
+      color: 255,
+      position: 2,
+      permissions: "1234"
+    },
+    {
+      id: "role_1",
+      guildId: "guild_42",
+      name: "Member",
+      color: 0,
+      position: 1,
+      permissions: "5678"
+    }
+  ]);
+});
+
 test("lists pinned messages through rest transport with pagination query params", async () => {
   const requests: string[] = [];
 
@@ -543,6 +686,74 @@ test("client fetches guilds through mock transport", async () => {
     id: "guild_1",
     name: "Fluxer Guild",
     iconUrl: "https://cdn.fluxer.local/icon.png"
+  });
+});
+
+test("client lists guild roles through mock transport", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  transport.setGuildRoles("guild_1", [
+    {
+      id: "role_1",
+      guildId: "guild_1",
+      name: "Member",
+      permissions: "123"
+    },
+    {
+      id: "role_2",
+      guildId: "guild_1",
+      name: "Moderator",
+      permissions: "456"
+    }
+  ]);
+
+  await client.connect();
+
+  assert.deepEqual(await client.listGuildRoles("guild_1"), [
+    {
+      id: "role_1",
+      guildId: "guild_1",
+      name: "Member",
+      permissions: "123"
+    },
+    {
+      id: "role_2",
+      guildId: "guild_1",
+      name: "Moderator",
+      permissions: "456"
+    }
+  ]);
+});
+
+test("client fetches guild members through mock transport", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  transport.setGuildMember({
+    guildId: "guild_1",
+    user: {
+      id: "user_1",
+      username: "fluxguy",
+      displayName: "Flux Guy"
+    },
+    nickname: "Flux",
+    roles: ["role_1"],
+    joinedAt: new Date("2026-03-18T21:00:00.000Z")
+  });
+
+  await client.connect();
+
+  assert.deepEqual(await client.fetchGuildMember("guild_1", "user_1"), {
+    guildId: "guild_1",
+    user: {
+      id: "user_1",
+      username: "fluxguy",
+      displayName: "Flux Guy"
+    },
+    nickname: "Flux",
+    roles: ["role_1"],
+    joinedAt: new Date("2026-03-18T21:00:00.000Z")
   });
 });
 

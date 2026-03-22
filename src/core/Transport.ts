@@ -7,11 +7,13 @@ import type {
   FluxerGatewayStateHandler,
   FluxerChannel,
   FluxerGuild,
+  FluxerGuildMember,
   FluxerListPinnedMessagesOptions,
   FluxerListMessagesOptions,
   FluxerMessage,
   FluxerMessageHandler,
   FluxerPinnedMessageList,
+  FluxerRole,
   FluxerTransport,
   SendMessagePayload
 } from "./types.js";
@@ -104,6 +106,23 @@ export abstract class BaseTransport implements FluxerTransport {
     throw new FluxerError(
       "This transport does not support fetching guilds.",
       "TRANSPORT_FETCH_GUILD_UNSUPPORTED"
+    );
+  }
+
+  public async fetchGuildMember(guildId: string, userId: string): Promise<FluxerGuildMember> {
+    void guildId;
+    void userId;
+    throw new FluxerError(
+      "This transport does not support fetching guild members.",
+      "TRANSPORT_FETCH_GUILD_MEMBER_UNSUPPORTED"
+    );
+  }
+
+  public async listGuildRoles(guildId: string): Promise<FluxerRole[]> {
+    void guildId;
+    throw new FluxerError(
+      "This transport does not support listing guild roles.",
+      "TRANSPORT_LIST_GUILD_ROLES_UNSUPPORTED"
     );
   }
 

@@ -7,11 +7,13 @@ import type {
   FluxerGatewaySessionHandler,
   FluxerGatewayStateHandler,
   FluxerGuild,
+  FluxerGuildMember,
   FluxerListPinnedMessagesOptions,
   FluxerListMessagesOptions,
   FluxerMessage,
   FluxerMessageHandler,
   FluxerPinnedMessageList,
+  FluxerRole,
   FluxerTransport,
   SendMessagePayload
 } from "./types.js";
@@ -85,6 +87,14 @@ export class PlatformTransport extends BaseTransport {
 
   public async fetchGuild(guildId: string): Promise<FluxerGuild> {
     return this.#outbound.fetchGuild(guildId);
+  }
+
+  public async fetchGuildMember(guildId: string, userId: string): Promise<FluxerGuildMember> {
+    return this.#outbound.fetchGuildMember(guildId, userId);
+  }
+
+  public async listGuildRoles(guildId: string): Promise<FluxerRole[]> {
+    return this.#outbound.listGuildRoles(guildId);
   }
 
   public async listPinnedMessages(
