@@ -8,6 +8,7 @@ import type {
   FluxerGatewayStateHandler,
   FluxerGuild,
   FluxerGuildMember,
+  FluxerInvite,
   FluxerListPinnedMessagesOptions,
   FluxerListMessagesOptions,
   FluxerMessage,
@@ -84,6 +85,10 @@ export class PlatformTransport extends BaseTransport {
 
   public async fetchUser(userId: string): Promise<FluxerUser> {
     return this.#outbound.fetchUser(userId);
+  }
+
+  public async fetchInvite(inviteCode: string): Promise<FluxerInvite> {
+    return this.#outbound.fetchInvite(inviteCode);
   }
 
   public async indicateTyping(channelId: string): Promise<void> {

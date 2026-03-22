@@ -94,6 +94,44 @@ function createRestUserResponse(overrides: Partial<{
   });
 }
 
+function createRestInviteResponse(overrides: Partial<{
+  code: string;
+  guild: { id: string };
+  channel: { id: string };
+  inviter: {
+    id: string;
+    username: string;
+    global_name?: string | null;
+    bot?: boolean;
+  };
+  temporary: boolean;
+  expires_at: string | null;
+}> = {}): Response {
+  return new Response(JSON.stringify({
+    code: "fluxer",
+    guild: {
+      id: "guild_42"
+    },
+    channel: {
+      id: "general"
+    },
+    inviter: {
+      id: "user_1",
+      username: "fluxguy",
+      global_name: "Flux Guy",
+      bot: false
+    },
+    temporary: false,
+    expires_at: "2026-03-25T12:00:00.000Z",
+    ...overrides
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json"
+    }
+  });
+}
+
 function createRestGuildResponse(overrides: Partial<{
   id: string;
   name: string;
@@ -563,6 +601,35 @@ test("fetches users by id through rest transport", async () => {
   });
 });
 
+test("fetches invite information through rest transport", async () => {
+  const requests: string[] = [];
+
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return createRestInviteResponse();
+    }
+  });
+
+  const invite = await transport.fetchInvite("fluxer");
+
+  assert.equal(requests[0], "https://fluxer.local/api/v1/invites/fluxer");
+  assert.deepEqual(invite, {
+    code: "fluxer",
+    guildId: "guild_42",
+    channelId: "general",
+    inviter: {
+      id: "user_1",
+      username: "fluxguy",
+      displayName: "Flux Guy",
+      isBot: false
+    },
+    temporary: false,
+    expiresAt: new Date("2026-03-25T12:00:00.000Z")
+  });
+});
+
 test("fetches guilds through rest transport", async () => {
   const requests: string[] = [];
 
@@ -893,6 +960,41 @@ test("client fetches users by id through mock transport", async () => {
     username: "fluxfriend",
     displayName: "Flux Friend",
     isBot: false
+  });
+});
+
+test("client fetches invites through mock transport", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  transport.setInvite({
+    code: "fluxer",
+    guildId: "guild_42",
+    channelId: "general",
+    inviter: {
+      id: "user_1",
+      username: "fluxguy",
+      displayName: "Flux Guy",
+      isBot: false
+    },
+    temporary: false,
+    expiresAt: new Date("2026-03-25T12:00:00.000Z")
+  });
+
+  await client.connect();
+
+  assert.deepEqual(await client.fetchInvite("fluxer"), {
+    code: "fluxer",
+    guildId: "guild_42",
+    channelId: "general",
+    inviter: {
+      id: "user_1",
+      username: "fluxguy",
+      displayName: "Flux Guy",
+      isBot: false
+    },
+    temporary: false,
+    expiresAt: new Date("2026-03-25T12:00:00.000Z")
   });
 });
 

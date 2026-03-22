@@ -582,6 +582,7 @@ export interface FluxerTransport {
   sendMessage(payload: SendMessagePayload): Promise<void>;
   fetchCurrentUser(): Promise<FluxerUser>;
   fetchUser(userId: string): Promise<FluxerUser>;
+  fetchInvite(inviteCode: string): Promise<FluxerInvite>;
   indicateTyping(channelId: string): Promise<void>;
   fetchChannel(channelId: string): Promise<FluxerChannel>;
   fetchGuild(guildId: string): Promise<FluxerGuild>;
@@ -780,6 +781,7 @@ export interface FluxerClientLike {
   sendMessage(channelId: string, message: FluxerMessageInput): Promise<void>;
   fetchCurrentUser?(): Promise<FluxerUser>;
   fetchUser?(userId: string): Promise<FluxerUser>;
+  fetchInvite?(inviteCode: string): Promise<FluxerInvite>;
   indicateTyping?(channelId: string): Promise<void>;
   fetchChannel?(channelId: string): Promise<FluxerChannel>;
   fetchGuild?(guildId: string): Promise<FluxerGuild>;

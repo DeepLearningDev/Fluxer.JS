@@ -312,6 +312,44 @@ export class FluxerClient extends EventEmitter {
     }
   }
 
+  public async fetchInvite(inviteCode: string): Promise<FluxerInvite> {
+    this.emitDebug({
+      scope: "client",
+      event: "fetch_invite_started",
+      level: "debug",
+      data: {
+        inviteCode
+      }
+    });
+
+    try {
+      const invite = await this.#transport.fetchInvite(inviteCode);
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_invite_succeeded",
+        level: "debug",
+        data: {
+          inviteCode: invite.code,
+          guildId: invite.guildId,
+          channelId: invite.channelId
+        }
+      });
+      return invite;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Fetch invite failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "fetch_invite_failed",
+        level: "error",
+        data: {
+          inviteCode,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
   public async indicateTyping(channelId: string): Promise<void> {
     this.emitDebug({
       scope: "client",

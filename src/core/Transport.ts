@@ -8,6 +8,7 @@ import type {
   FluxerChannel,
   FluxerGuild,
   FluxerGuildMember,
+  FluxerInvite,
   FluxerListPinnedMessagesOptions,
   FluxerListMessagesOptions,
   FluxerMessage,
@@ -98,6 +99,14 @@ export abstract class BaseTransport implements FluxerTransport {
     throw new FluxerError(
       "This transport does not support fetching users.",
       "TRANSPORT_FETCH_USER_UNSUPPORTED"
+    );
+  }
+
+  public async fetchInvite(inviteCode: string): Promise<FluxerInvite> {
+    void inviteCode;
+    throw new FluxerError(
+      "This transport does not support fetching invites.",
+      "TRANSPORT_FETCH_INVITE_UNSUPPORTED"
     );
   }
 

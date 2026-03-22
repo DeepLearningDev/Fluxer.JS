@@ -8,6 +8,7 @@ import type {
   FluxerGuildMember,
   FluxerGatewaySession,
   FluxerGatewayStateChangeEvent,
+  FluxerInvite,
   FluxerListPinnedMessagesOptions,
   FluxerListMessagesOptions,
   FluxerMessage,
@@ -27,6 +28,7 @@ export class MockTransport extends BaseTransport {
   readonly #guildChannels = new Map<string, FluxerChannel[]>();
   readonly #guildMembers = new Map<string, FluxerGuildMember>();
   readonly #guildRoles = new Map<string, FluxerRole[]>();
+  readonly #invites = new Map<string, FluxerInvite>();
   readonly #users = new Map<string, FluxerUser>();
   #currentUser: FluxerUser = {
     id: "mock_transport",
@@ -72,6 +74,10 @@ export class MockTransport extends BaseTransport {
 
   public setUser(user: FluxerUser): void {
     this.#users.set(user.id, { ...user });
+  }
+
+  public setInvite(invite: FluxerInvite): void {
+    this.#invites.set(invite.code, cloneInvite(invite));
   }
 
   public setGuildMember(member: FluxerGuildMember): void {
@@ -143,6 +149,15 @@ export class MockTransport extends BaseTransport {
     }
 
     return { ...user };
+  }
+
+  public async fetchInvite(inviteCode: string): Promise<FluxerInvite> {
+    const invite = this.#invites.get(inviteCode);
+    if (!invite) {
+      throw new FluxerError("MockTransport could not find the requested invite.", "MOCK_INVITE_NOT_FOUND");
+    }
+
+    return cloneInvite(invite);
   }
 
   public async indicateTyping(channelId: string): Promise<void> {
@@ -406,4 +421,19 @@ function resolvePinnedMessagesBefore(before?: string | Date): Date | undefined {
   }
 
   return resolvedDate;
+}
+
+function cloneInvite(invite: FluxerInvite): FluxerInvite {
+  return {
+    code: invite.code,
+    ...(invite.guildId !== undefined ? { guildId: invite.guildId } : {}),
+    ...(invite.channelId !== undefined ? { channelId: invite.channelId } : {}),
+    ...(invite.inviter ? { inviter: { ...invite.inviter } } : {}),
+    ...(invite.uses !== undefined ? { uses: invite.uses } : {}),
+    ...(invite.maxUses !== undefined ? { maxUses: invite.maxUses } : {}),
+    ...(invite.maxAgeSeconds !== undefined ? { maxAgeSeconds: invite.maxAgeSeconds } : {}),
+    ...(invite.temporary !== undefined ? { temporary: invite.temporary } : {}),
+    ...(invite.createdAt ? { createdAt: new Date(invite.createdAt) } : {}),
+    ...(invite.expiresAt ? { expiresAt: new Date(invite.expiresAt) } : {})
+  };
 }

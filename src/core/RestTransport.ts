@@ -8,6 +8,7 @@ import type {
   FluxerChannel,
   FluxerGuild,
   FluxerGuildMember,
+  FluxerInvite,
   FluxerListPinnedMessagesOptions,
   FluxerInstanceDiscoveryDocument,
   FluxerListMessagesOptions,
@@ -165,6 +166,45 @@ export class RestTransport extends BaseTransport {
       method: "GET",
       url: requestUrl,
       userId
+    });
+  }
+
+  public async fetchInvite(inviteCode: string): Promise<FluxerInvite> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/invites/${inviteCode}`;
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "GET",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "GET",
+        url: requestUrl,
+        inviteCode,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "GET",
+        url: requestUrl,
+        inviteCode
+      });
+    }
+
+    return parseRestInvite(await parseJsonResponse(response), {
+      method: "GET",
+      url: requestUrl,
+      inviteCode
     });
   }
 
@@ -769,6 +809,81 @@ function parseRestUser(
   };
 }
 
+function parseRestInvite(
+  payload: unknown,
+  context: {
+    method: string;
+    url: string;
+    inviteCode: string;
+  }
+): FluxerInvite {
+  const invite = payload as {
+    code?: string;
+    guild?: { id?: string };
+    channel?: { id?: string };
+    inviter?: unknown;
+    temporary?: boolean;
+    uses?: number;
+    max_uses?: number;
+    max_age?: number;
+    created_at?: string | null;
+    expires_at?: string | null;
+  };
+
+  if (!invite?.code) {
+    throw new RestTransportError({
+      message: "RestTransport received an invite response with missing required fields.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  if (invite.guild !== undefined && invite.guild?.id === undefined) {
+    throw new RestTransportError({
+      message: "RestTransport received an invite response with an invalid guild shape.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  if (invite.channel !== undefined && invite.channel?.id === undefined) {
+    throw new RestTransportError({
+      message: "RestTransport received an invite response with an invalid channel shape.",
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  const inviter = invite.inviter ? parseRestUser(invite.inviter, context) : undefined;
+  const createdAt = parseOptionalDateTime(invite.created_at, context, payload, "creation");
+  const expiresAt = parseOptionalDateTime(invite.expires_at, context, payload, "expiration");
+
+  return {
+    code: invite.code,
+    guildId: invite.guild?.id,
+    channelId: invite.channel?.id,
+    ...(inviter ? { inviter } : {}),
+    ...(invite.temporary !== undefined ? { temporary: invite.temporary } : {}),
+    ...(invite.uses !== undefined ? { uses: invite.uses } : {}),
+    ...(invite.max_uses !== undefined ? { maxUses: invite.max_uses } : {}),
+    ...(invite.max_age !== undefined ? { maxAgeSeconds: invite.max_age } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(expiresAt ? { expiresAt } : {})
+  };
+}
+
 function parseRestChannel(
   payload: unknown,
   context: {
@@ -864,6 +979,36 @@ function parseRestGuild(
     name: guild.name,
     iconUrl: guild.icon ?? undefined
   };
+}
+
+function parseOptionalDateTime(
+  value: string | null | undefined,
+  context: {
+    method: string;
+    url: string;
+    inviteCode: string;
+  },
+  payload: unknown,
+  label: "creation" | "expiration"
+): Date | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new RestTransportError({
+      message: `RestTransport received an invite response with an invalid ${label} timestamp.`,
+      code: "REST_RESPONSE_INVALID",
+      retryable: false,
+      details: {
+        ...context,
+        payload
+      }
+    });
+  }
+
+  return parsed;
 }
 
 function parseRestGuildMember(
@@ -1182,6 +1327,7 @@ function createRequestFailedError(context: {
   channelId?: string;
   guildId?: string;
   userId?: string;
+  inviteCode?: string;
   messageId?: string;
   error: unknown;
 }): RestTransportError {
@@ -1195,6 +1341,7 @@ function createRequestFailedError(context: {
       channelId: context.channelId,
       guildId: context.guildId,
       userId: context.userId,
+      inviteCode: context.inviteCode,
       messageId: context.messageId,
       message: context.error instanceof Error ? context.error.message : String(context.error)
     }
@@ -1209,6 +1356,7 @@ async function createResponseError(
     channelId?: string;
     guildId?: string;
     userId?: string;
+    inviteCode?: string;
     messageId?: string;
   }
 ): Promise<RestTransportError> {
@@ -1227,6 +1375,7 @@ async function createResponseError(
         channelId: context.channelId,
         guildId: context.guildId,
         userId: context.userId,
+        inviteCode: context.inviteCode,
         messageId: context.messageId,
         statusText: response.statusText,
         responseBody,
@@ -1249,6 +1398,7 @@ async function createResponseError(
       channelId: context.channelId,
       guildId: context.guildId,
       userId: context.userId,
+      inviteCode: context.inviteCode,
       messageId: context.messageId,
       statusText: response.statusText,
       responseBody
