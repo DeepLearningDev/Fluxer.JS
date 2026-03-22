@@ -41,7 +41,9 @@ Important alpha caveats:
 - Node `>=20` is required
 - the gateway session/runtime layer is implemented and tested, but parts of its lifecycle still rely on Discord-compatible assumptions because Fluxer's dedicated lifecycle docs are still incomplete
 - the REST surface is still intentionally narrow, but it now covers bootstrap/discovery plus core channel reads and message operations: fetch channel, list messages, send, fetch, edit, and delete messages
+- the REST surface is still intentionally narrow, but it now covers bootstrap/discovery plus core channel reads and message operations: fetch channel, list messages, indicate typing, send, fetch, edit, and delete messages
 - real-instance bootstrap through `createFluxerPlatformTransport(...)` now surfaces typed `PlatformBootstrapError` failures for discovery, gateway-info, and unsupported-capability startup paths
+- the exported low-level discovery helpers surface typed `DiscoveryError` failures for request, HTTP, and invalid-response cases
 - release verification includes both a built-example smoke test and an installed-package smoke test through the published entrypoint
 - many common gateway event families are normalized, but not the entire Fluxer surface yet
 - this is not a production-ready framework yet
@@ -311,6 +313,7 @@ Rich messages are now builder-driven:
 - `client.sendMessage(...)` and `context.reply(...)` accept either strings or rich payloads
 - `client.listMessages(...)` exposes the current channel message listing surface with `limit`, `before`, `after`, and `around`
 - `client.fetchChannel(...)` exposes the current channel fetch surface
+- `client.indicateTyping(...)` exposes the current typing indicator surface
 - `client.fetchMessage(...)`, `client.editMessage(...)`, and `client.deleteMessage(...)` expose the current message lifecycle surface
 
 Serializer preview example:
@@ -389,7 +392,7 @@ bot.command({
 The framework now supports three transport patterns:
 
 - `MockTransport` for local development and tests
-- `RestTransport` for HTTP actions like fetching channels plus listing, sending, fetching, editing, and deleting messages
+- `RestTransport` for HTTP actions like fetching channels, indicating typing, plus listing, sending, fetching, editing, and deleting messages
 - `GatewayTransport` for realtime inbound events over WebSocket
 
 For test-heavy workflows, `FluxerTestRuntime` wraps `MockTransport` with fixture builders and deterministic event injection:

@@ -72,6 +72,10 @@ export class PlatformTransport extends BaseTransport {
     await this.#outbound.sendMessage(payload);
   }
 
+  public async indicateTyping(channelId: string): Promise<void> {
+    await this.#outbound.indicateTyping(channelId);
+  }
+
   public async fetchChannel(channelId: string): Promise<FluxerChannel> {
     return this.#outbound.fetchChannel(channelId);
   }

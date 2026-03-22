@@ -87,6 +87,39 @@ export class RestTransport extends BaseTransport {
     }
   }
 
+  public async indicateTyping(channelId: string): Promise<void> {
+    const baseUrl = await this.#ensureBaseUrl();
+    const requestUrl = `${baseUrl}/v1/channels/${channelId}/typing`;
+
+    let response: Response;
+    try {
+      response = await this.#fetchImpl(requestUrl, {
+        method: "POST",
+        headers: createRequestHeaders({
+          headers: this.#headers,
+          authHeader: this.#createAuthHeader(),
+          userAgent: this.#userAgent,
+          hasAttachments: false
+        })
+      });
+    } catch (error) {
+      throw createRequestFailedError({
+        method: "POST",
+        url: requestUrl,
+        channelId,
+        error
+      });
+    }
+
+    if (!response.ok) {
+      throw await createResponseError(response, {
+        method: "POST",
+        url: requestUrl,
+        channelId
+      });
+    }
+  }
+
   public async fetchChannel(channelId: string): Promise<FluxerChannel> {
     const baseUrl = await this.#ensureBaseUrl();
     const requestUrl = `${baseUrl}/v1/channels/${channelId}`;

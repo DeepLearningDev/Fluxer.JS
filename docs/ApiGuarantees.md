@@ -14,7 +14,7 @@ The following surfaces are intended for package consumers:
 For the current alpha, "public API" means "intended for consumers and documented," not "locked against change." The stability promise is still evolving until a later beta/stable release.
 
 Examples, README snippets, and release docs are meant to describe the intended consumer path, but the supported runtime surface is still defined by documented package-root exports and the behavioral notes attached to them.
-That includes the documented error families exported from `fluxer-js`, such as `PlatformBootstrapError`, `GatewayTransportError`, `GatewayProtocolError`, `RestTransportError`, and `PayloadValidationError`.
+That includes the documented error families exported from `fluxer-js`, such as `DiscoveryError`, `PlatformBootstrapError`, `GatewayTransportError`, `GatewayProtocolError`, `RestTransportError`, and `PayloadValidationError`.
 
 ## Not guaranteed as public API
 

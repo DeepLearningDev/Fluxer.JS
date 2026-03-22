@@ -240,6 +240,41 @@ export class FluxerClient extends EventEmitter {
     }
   }
 
+  public async indicateTyping(channelId: string): Promise<void> {
+    this.emitDebug({
+      scope: "client",
+      event: "indicate_typing_started",
+      level: "debug",
+      data: {
+        channelId
+      }
+    });
+
+    try {
+      await this.#transport.indicateTyping(channelId);
+      this.emitDebug({
+        scope: "client",
+        event: "indicate_typing_succeeded",
+        level: "debug",
+        data: {
+          channelId
+        }
+      });
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("Indicate typing failed.");
+      this.emitDebug({
+        scope: "client",
+        event: "indicate_typing_failed",
+        level: "error",
+        data: {
+          channelId,
+          message: normalizedError.message
+        }
+      });
+      throw normalizedError;
+    }
+  }
+
   public async fetchChannel(channelId: string): Promise<FluxerChannel> {
     this.emitDebug({
       scope: "client",

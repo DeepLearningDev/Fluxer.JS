@@ -80,6 +80,14 @@ export abstract class BaseTransport implements FluxerTransport {
   public abstract disconnect(): Promise<void>;
   public abstract sendMessage(payload: SendMessagePayload): Promise<void>;
 
+  public async indicateTyping(channelId: string): Promise<void> {
+    void channelId;
+    throw new FluxerError(
+      "This transport does not support typing indicators.",
+      "TRANSPORT_INDICATE_TYPING_UNSUPPORTED"
+    );
+  }
+
   public async fetchChannel(channelId: string): Promise<FluxerChannel> {
     void channelId;
     throw new FluxerError(

@@ -241,14 +241,14 @@ test("emits typed diagnostics when discovery bootstrap fails", async () => {
     assert.equal(error.code, "PLATFORM_DISCOVERY_FAILED");
     assert.equal(error.retryable, true);
     assert.equal(error.details?.instanceUrl, "https://fluxer.local");
-    assert.equal(error.details?.message, "network down");
+    assert.equal(error.details?.message, "Failed to fetch the Fluxer discovery document.");
     return true;
   });
 
   const debugEvent = debugEvents.find((event) => event.event === "platform_transport_discovery_failed");
   assert.deepEqual(debugEvent?.data, {
     instanceUrl: "https://fluxer.local",
-    message: "network down"
+    message: "Failed to fetch the Fluxer discovery document."
   });
 });
 
@@ -314,7 +314,7 @@ test("emits typed diagnostics when gateway info bootstrap fails", async () => {
   assert.deepEqual(debugEvent?.data, {
     instanceUrl: "https://fluxer.local",
     apiBaseUrl: "https://fluxer.local/api",
-    message: "Failed to fetch Fluxer gateway information: 503 Service Unavailable"
+    message: "Failed to fetch Fluxer gateway bootstrap information: 503 Service Unavailable"
   });
 });
 

@@ -10,6 +10,25 @@ export class FluxerError extends Error {
   }
 }
 
+export class DiscoveryError extends FluxerError {
+  public readonly retryable: boolean;
+  public readonly status?: number;
+  public readonly details?: Record<string, unknown>;
+
+  public constructor(options: {
+    message: string;
+    code: string;
+    retryable?: boolean;
+    status?: number;
+    details?: Record<string, unknown>;
+  }) {
+    super(options.message, options.code);
+    this.retryable = options.retryable ?? false;
+    this.status = options.status;
+    this.details = options.details;
+  }
+}
+
 export class GatewayTransportError extends FluxerError {
   public readonly state?: FluxerGatewayConnectionState;
   public readonly retryable: boolean;

@@ -117,7 +117,7 @@ test("emits typed diagnostics when discovery fetch fails", async () => {
     assert.equal(error.code, "REST_DISCOVERY_FAILED");
     assert.equal(error.retryable, true);
     assert.equal(error.details?.instanceUrl, "https://fluxer.local");
-    assert.equal(error.details?.message, "network down");
+    assert.equal(error.details?.message, "Failed to fetch the Fluxer discovery document.");
     return true;
   });
 });
@@ -349,6 +349,32 @@ test("fetches channels through rest transport and normalizes channel type", asyn
   });
 });
 
+test("indicates typing activity through rest transport", async () => {
+  const requests: Array<{ method?: string; url: string }> = [];
+
+  const transport = new RestTransport({
+    baseUrl: "https://fluxer.local/api",
+    fetchImpl: async (input, init) => {
+      requests.push({
+        method: init?.method,
+        url: String(input)
+      });
+      return new Response(null, {
+        status: 204
+      });
+    }
+  });
+
+  await transport.indicateTyping("general");
+
+  assert.deepEqual(requests, [
+    {
+      method: "POST",
+      url: "https://fluxer.local/api/v1/channels/general/typing"
+    }
+  ]);
+});
+
 test("client proxies message lifecycle operations through mock transport", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
@@ -380,6 +406,21 @@ test("client fetches channels through mock transport", async () => {
   const channel = await client.fetchChannel("general");
 
   assert.deepEqual(channel, {
+    id: "general",
+    name: "general",
+    type: "text"
+  });
+});
+
+test("client indicates typing through mock transport", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+
+  await client.connect();
+  await client.indicateTyping("general");
+
+  assert.deepEqual(transport.typingChannelIds, ["general"]);
+  assert.deepEqual(await client.fetchChannel("general"), {
     id: "general",
     name: "general",
     type: "text"

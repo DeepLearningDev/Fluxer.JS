@@ -54,6 +54,7 @@ export {
 } from "./core/Instance.js";
 export {
   CommandSchemaError,
+  DiscoveryError,
   FluxerError,
   GatewayProtocolError,
   GatewayTransportError,

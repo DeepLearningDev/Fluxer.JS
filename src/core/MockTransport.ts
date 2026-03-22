@@ -15,6 +15,7 @@ import { FluxerError } from "./errors.js";
 export class MockTransport extends BaseTransport {
   #connected = false;
   #sentMessages: SendMessagePayload[] = [];
+  readonly #typingChannelIds: string[] = [];
   readonly #channels = new Map<string, FluxerChannel>();
   readonly #messageStore = new Map<string, FluxerMessage>();
   #nextMessageId = 1;
@@ -26,6 +27,10 @@ export class MockTransport extends BaseTransport {
 
   public get sentMessages(): SendMessagePayload[] {
     return [...this.#sentMessages];
+  }
+
+  public get typingChannelIds(): string[] {
+    return [...this.#typingChannelIds];
   }
 
   public clearSentMessages(): void {
@@ -62,6 +67,17 @@ export class MockTransport extends BaseTransport {
       ? ` (+${payload.attachments.length} attachment(s))`
       : "";
     console.log(`[Fluxer:${timestamp}] -> ${payload.channelId}: ${content}${embedSuffix}${attachmentSuffix}`);
+  }
+
+  public async indicateTyping(channelId: string): Promise<void> {
+    this.#typingChannelIds.push(channelId);
+    if (!this.#channels.has(channelId)) {
+      this.#channels.set(channelId, {
+        id: channelId,
+        name: channelId,
+        type: "text"
+      });
+    }
   }
 
   public async fetchChannel(channelId: string): Promise<FluxerChannel> {
