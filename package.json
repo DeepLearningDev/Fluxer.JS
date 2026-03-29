@@ -31,6 +31,7 @@
     "start:contract": "node dist/examples/live-instance-contract.js",
     "start:hosted": "node dist/examples/hosted-instance-confidence.js",
     "report:contract": "node scripts/summarize-live-contract-report.mjs",
+    "report:hosted": "node scripts/summarize-live-contract-report.mjs",
     "smoke:minimal": "node dist/examples/minimal.js",
     "smoke:package": "node scripts/verify-package-install.mjs",
     "lint": "eslint .",

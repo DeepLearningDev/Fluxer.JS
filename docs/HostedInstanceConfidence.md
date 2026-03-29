@@ -72,7 +72,7 @@ If `FLUXER_HOSTED_REPORT_PATH` is set, the path also writes a JSON report with:
 You can turn that JSON artifact into a markdown summary with:
 
 ```bash
-npm run report:contract -- ./artifacts/hosted-confidence-report.json ./artifacts/hosted-confidence-report.md
+npm run report:hosted -- ./artifacts/hosted-confidence-report.json ./artifacts/hosted-confidence-report.md
 ```
 
 ## When To Use This

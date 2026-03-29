@@ -26,6 +26,7 @@ interface ConfidenceStepRecord {
 }
 
 interface HostedConfidenceReport {
+  mode: "hosted-confidence";
   startedAt: string;
   finishedAt?: string;
   status: "running" | "passed" | "failed";
@@ -38,8 +39,15 @@ interface HostedConfidenceReport {
     id: string;
     username: string;
   };
+  channel?: {
+    id: string;
+    name: string;
+    type: string;
+  };
   instance?: {
     apiBaseUrl?: string;
+    gatewayUrl?: string;
+    apiCodeVersion?: number;
     isSelfHosted?: boolean;
     capabilities: string[];
   };
@@ -234,6 +242,7 @@ function createRunReport(options: {
   reportPath?: string;
 }): HostedConfidenceReport {
   return {
+    mode: "hosted-confidence",
     startedAt: new Date().toISOString(),
     status: "running",
     instanceUrl: options.instanceUrl,
@@ -377,6 +386,8 @@ async function main(): Promise<void> {
   });
   report.instance = {
     apiBaseUrl: instanceInfo.apiBaseUrl,
+    gatewayUrl: instanceInfo.gatewayBaseUrl,
+    apiCodeVersion: instanceInfo.apiCodeVersion,
     isSelfHosted: instanceInfo.isSelfHosted,
     capabilities: listEnabledCapabilities(instanceInfo.capabilities)
   };
@@ -471,6 +482,11 @@ async function main(): Promise<void> {
     channelId
   });
   const channel = await client.fetchChannel(channelId);
+  report.channel = {
+    id: channel.id,
+    name: channel.name,
+    type: channel.type
+  };
   recordStep(report, "fetch_channel", "passed", {
     channelId: channel.id,
     channelName: channel.name,

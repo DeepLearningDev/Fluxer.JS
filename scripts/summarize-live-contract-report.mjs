@@ -24,9 +24,14 @@ if (outputArg) {
 }
 
 function renderSummary(report, inputPath) {
+  const mode = String(report.mode ?? "contract");
+  const title = mode === "hosted-confidence"
+    ? "# Fluxer.JS Hosted Confidence Report"
+    : "# Fluxer.JS Live Contract Report";
   const lines = [
-    "# Fluxer.JS Live Contract Report",
+    title,
     "",
+    `- Mode: ${mode}`,
     `- Status: ${String(report.status ?? "unknown")}`,
     `- Started: ${String(report.startedAt ?? "unknown")}`,
     `- Finished: ${String(report.finishedAt ?? "unknown")}`,
@@ -37,10 +42,29 @@ function renderSummary(report, inputPath) {
     ""
   ];
 
+  if (report.instance) {
+    lines.push("## Instance", "");
+    lines.push(`- API Base: ${String(report.instance.apiBaseUrl ?? "unknown")}`);
+    lines.push(`- Gateway URL: ${String(report.instance.gatewayUrl ?? "unknown")}`);
+    lines.push(`- API Code Version: ${String(report.instance.apiCodeVersion ?? "unknown")}`);
+    lines.push(`- Self Hosted: ${report.instance.isSelfHosted === true ? "yes" : "no"}`);
+    if (Array.isArray(report.instance.capabilities)) {
+      lines.push(`- Capabilities: ${report.instance.capabilities.join(", ") || "none"}`);
+    }
+    lines.push("");
+  }
+
   if (report.currentUser) {
     lines.push("## Current User", "");
     lines.push(`- Username: ${String(report.currentUser.username ?? "unknown")}`);
     lines.push(`- User ID: ${String(report.currentUser.id ?? "unknown")}`, "");
+  }
+
+  if (report.channel) {
+    lines.push("## Channel", "");
+    lines.push(`- Channel ID: ${String(report.channel.id ?? "unknown")}`);
+    lines.push(`- Name: ${String(report.channel.name ?? "unknown")}`);
+    lines.push(`- Type: ${String(report.channel.type ?? "unknown")}`, "");
   }
 
   if (report.probe) {
