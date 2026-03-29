@@ -12,6 +12,7 @@ Use it when the official hosted Fluxer API is your target and the stronger bot-r
 - the target channel can be fetched
 - outbound typing and outbound message send succeed
 - the sent probe shows up again through live channel reads
+- the confirmed probe can be fetched directly by message ID
 
 This is intentionally narrower than the self-hosted live contract harness because it does not prove the stronger bot-gateway bootstrap path or bot-runtime command handling.
 
@@ -60,13 +61,14 @@ If the hosted path succeeds, it will:
 - send a typing indicator
 - send a unique probe message
 - verify that the same probe appears in recent channel history
+- fetch that confirmed probe directly through `fetchMessage(...)`
 
 If `FLUXER_HOSTED_REPORT_PATH` is set, the path also writes a JSON report with:
 
 - run timestamps
 - instance capability snapshot
 - current bot identity
-- probe content and confirmed message ID
+- probe content, confirmed message ID, and direct fetch confirmation
 - typed failure metadata when the run fails
 
 You can turn that JSON artifact into a markdown summary with:

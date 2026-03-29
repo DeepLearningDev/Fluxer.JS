@@ -54,6 +54,8 @@ interface HostedConfidenceReport {
   probe?: {
     content: string;
     confirmedMessageId?: string;
+    fetchedMessageId?: string;
+    fetchedMessageContent?: string;
   };
   steps: ConfidenceStepRecord[];
   error?: {
@@ -535,6 +537,18 @@ async function main(): Promise<void> {
   recordStep(report, "confirm_probe", "passed", {
     confirmedMessageId
   });
+
+  recordStep(report, "fetch_confirmed_probe", "started", {
+    channelId,
+    messageId: confirmedMessageId
+  });
+  const fetchedMessage = await client.fetchMessage(channelId, confirmedMessageId);
+  report.probe.fetchedMessageId = fetchedMessage.id;
+  report.probe.fetchedMessageContent = fetchedMessage.content;
+  recordStep(report, "fetch_confirmed_probe", "passed", {
+    messageId: fetchedMessage.id
+  });
+  console.log(`Fetched confirmed probe directly: ${fetchedMessage.id}`);
 
   recordStep(report, "disconnect", "started");
   await client.disconnect();

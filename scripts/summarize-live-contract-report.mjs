@@ -70,7 +70,14 @@ function renderSummary(report, inputPath) {
   if (report.probe) {
     lines.push("## Probe", "");
     lines.push(`- Content: ${String(report.probe.content ?? "unknown")}`);
-    lines.push(`- Confirmed message ID: ${String(report.probe.confirmedMessageId ?? "not confirmed")}`, "");
+    lines.push(`- Confirmed message ID: ${String(report.probe.confirmedMessageId ?? "not confirmed")}`);
+    if (report.probe.fetchedMessageId) {
+      lines.push(`- Direct fetch message ID: ${String(report.probe.fetchedMessageId)}`);
+    }
+    if (report.probe.fetchedMessageContent) {
+      lines.push(`- Direct fetch content: ${String(report.probe.fetchedMessageContent)}`);
+    }
+    lines.push("");
   }
 
   lines.push("## Steps", "");
