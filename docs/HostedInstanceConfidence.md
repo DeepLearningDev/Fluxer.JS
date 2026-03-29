@@ -9,6 +9,7 @@ Use it when the official hosted Fluxer API is your target and the stronger bot-r
 - discovery succeeds
 - a hosted gateway session can be started from the discovery gateway URL
 - the current bot identity can be fetched
+- the same bot identity can be fetched again through `fetchUser(...)`
 - the target channel can be fetched
 - outbound typing and outbound message send succeed
 - the sent probe shows up again through live channel reads
@@ -59,6 +60,7 @@ If the hosted path succeeds, it will:
 
 - discover the instance
 - fetch the current bot user
+- fetch that same bot again through `fetchUser(currentUser.id)`
 - fetch the contract channel
 - send a typing indicator
 - send a unique probe message
@@ -71,7 +73,7 @@ If `FLUXER_HOSTED_REPORT_PATH` is set, the path also writes a JSON report with:
 
 - run timestamps
 - instance capability snapshot
-- current bot identity
+- current bot identity plus a direct `fetchUser(...)` proof
 - probe content, confirmed message ID, direct fetch confirmation, edited-message confirmation, and delete confirmation
 - typed failure metadata when the run fails
 

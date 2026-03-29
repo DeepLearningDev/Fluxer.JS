@@ -60,6 +60,12 @@ function renderSummary(report, inputPath) {
     lines.push(`- User ID: ${String(report.currentUser.id ?? "unknown")}`, "");
   }
 
+  if (report.fetchedUser) {
+    lines.push("## Fetched User", "");
+    lines.push(`- Username: ${String(report.fetchedUser.username ?? "unknown")}`);
+    lines.push(`- User ID: ${String(report.fetchedUser.id ?? "unknown")}`, "");
+  }
+
   if (report.channel) {
     lines.push("## Channel", "");
     lines.push(`- Channel ID: ${String(report.channel.id ?? "unknown")}`);

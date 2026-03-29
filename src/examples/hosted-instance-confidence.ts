@@ -39,6 +39,10 @@ interface HostedConfidenceReport {
     id: string;
     username: string;
   };
+  fetchedUser?: {
+    id: string;
+    username: string;
+  };
   channel?: {
     id: string;
     name: string;
@@ -486,6 +490,23 @@ async function main(): Promise<void> {
     username: currentUser.username
   });
   console.log(`Current user: ${currentUser.username} (${currentUser.id})`);
+
+  recordStep(report, "fetch_user_by_id", "started", {
+    userId: currentUser.id
+  });
+  const fetchedUser = await client.fetchUser(currentUser.id);
+  if (fetchedUser.id !== currentUser.id) {
+    throw new Error("Fetched user did not match the current bot identity.");
+  }
+  report.fetchedUser = {
+    id: fetchedUser.id,
+    username: fetchedUser.username
+  };
+  recordStep(report, "fetch_user_by_id", "passed", {
+    userId: fetchedUser.id,
+    username: fetchedUser.username
+  });
+  console.log(`Fetched user by id: ${fetchedUser.username} (${fetchedUser.id})`);
 
   recordStep(report, "fetch_channel", "started", {
     channelId

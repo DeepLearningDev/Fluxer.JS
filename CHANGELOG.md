@@ -24,6 +24,7 @@ with pre-release channels while the framework is not yet stable.
 - the hosted confidence path now also fetches the confirmed probe directly by message ID so the hosted lane proves one more honest read surface
 - the hosted confidence path now also edits the confirmed probe and re-fetches it so the hosted lane proves one more honest message-lifecycle step
 - the hosted confidence path now also deletes the edited probe and confirms the expected typed 404 fetch failure
+- the hosted confidence path now also proves `fetchUser(currentUser.id)` against the hosted API so the lane covers one more distinct read endpoint
 
 ### Fixed
 
