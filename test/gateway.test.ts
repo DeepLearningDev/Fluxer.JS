@@ -1013,6 +1013,98 @@ test("emits warning debug events for malformed non-message gateway payloads", as
   );
 });
 
+test("drops MESSAGE_CREATE dispatches with malformed timestamps and emits warnings", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const debugEvents: Array<{ event: string; level?: string; data?: Record<string, unknown> }> = [];
+  const messages: string[] = [];
+
+  client.on("debug", (event) => {
+    debugEvents.push({
+      event: event.event,
+      level: event.level,
+      data: event.data as Record<string, unknown> | undefined
+    });
+  });
+
+  client.on("messageCreate", (message) => {
+    messages.push(message.id);
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "MESSAGE_CREATE",
+    sequence: 10,
+    data: {
+      id: "msg_bad",
+      content: "hello",
+      author: {
+        id: "user_1",
+        username: "fluxguy"
+      },
+      channel_id: "general",
+      timestamp: "not-a-date"
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "msg_bad",
+        content: "hello",
+        author: {
+          id: "user_1",
+          username: "fluxguy"
+        },
+        channel_id: "general",
+        timestamp: "not-a-date"
+      },
+      s: 10,
+      t: "MESSAGE_CREATE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "MESSAGE_CREATE",
+    sequence: 11,
+    data: {
+      id: "msg_missing_timestamp",
+      content: "hello",
+      author: {
+        id: "user_2",
+        username: "fluxfriend"
+      },
+      channel_id: "general"
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "msg_missing_timestamp",
+        content: "hello",
+        author: {
+          id: "user_2",
+          username: "fluxfriend"
+        },
+        channel_id: "general"
+      },
+      s: 11,
+      t: "MESSAGE_CREATE"
+    }
+  });
+
+  assert.deepEqual(messages, []);
+
+  const ignoredEvents = debugEvents.filter((event) => event.event === "gateway_dispatch_ignored");
+  assert.deepEqual(
+    ignoredEvents.map((event) => ({
+      level: event.level,
+      type: event.data?.type,
+      reason: event.data?.reason
+    })),
+    [
+      { level: "warn", type: "MESSAGE_CREATE", reason: "invalid_message_payload" },
+      { level: "warn", type: "MESSAGE_CREATE", reason: "invalid_message_payload" }
+    ]
+  );
+});
+
 test("drops non-message gateway events with malformed timestamps and emits warnings", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);

@@ -811,6 +811,15 @@ export class FluxerClient extends EventEmitter {
     switch (event.type) {
       case "READY":
         return;
+      case "MESSAGE_CREATE": {
+        const message = this.#parseGatewayMessage(event);
+        if (message) {
+          this.emit("messageCreate", message);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_message_payload");
+        }
+        return;
+      }
       case "MESSAGE_UPDATE": {
         const message = this.#parseGatewayMessage(event);
         if (message) {
@@ -1078,7 +1087,8 @@ export class FluxerClient extends EventEmitter {
       timestamp?: string;
     };
 
-    if (!payload.id || !payload.author?.id || !payload.author.username || !payload.channel_id) {
+    const createdAt = this.#parseOptionalIsoDate(payload.timestamp);
+    if (!payload.id || !payload.author?.id || !payload.author.username || !payload.channel_id || !createdAt) {
       return null;
     }
 
@@ -1096,7 +1106,7 @@ export class FluxerClient extends EventEmitter {
         name: payload.channel_id,
         type: "text"
       },
-      createdAt: new Date(payload.timestamp ?? Date.now())
+      createdAt
     };
   }
 
