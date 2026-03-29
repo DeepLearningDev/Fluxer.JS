@@ -815,6 +815,8 @@ export class FluxerClient extends EventEmitter {
         const message = this.#parseGatewayMessage(event);
         if (message) {
           this.emit("messageUpdate", message);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_message_payload");
         }
         return;
       }
@@ -826,6 +828,8 @@ export class FluxerClient extends EventEmitter {
             channelId: payload.channel_id,
             guildId: payload.guild_id
           });
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "missing_required_fields");
         }
         return;
       }
@@ -833,6 +837,8 @@ export class FluxerClient extends EventEmitter {
         const messageDeleteBulk = this.#parseBulkMessageDelete(event);
         if (messageDeleteBulk) {
           this.emit("messageDeleteBulk", messageDeleteBulk);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_bulk_delete_payload");
         }
         return;
       }
@@ -846,6 +852,8 @@ export class FluxerClient extends EventEmitter {
               : "messageReactionRemove",
             reaction
           );
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_reaction_payload");
         }
         return;
       }
@@ -854,6 +862,8 @@ export class FluxerClient extends EventEmitter {
         const channel = this.#parseGatewayChannel(event);
         if (channel) {
           this.emit(event.type === "CHANNEL_CREATE" ? "channelCreate" : "channelUpdate", channel);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_channel_payload");
         }
         return;
       }
@@ -864,6 +874,8 @@ export class FluxerClient extends EventEmitter {
             id: payload.id,
             guildId: payload.guild_id
           });
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "missing_required_fields");
         }
         return;
       }
@@ -871,6 +883,8 @@ export class FluxerClient extends EventEmitter {
         const channelPinsUpdate = this.#parseChannelPinsUpdate(event);
         if (channelPinsUpdate) {
           this.emit("channelPinsUpdate", channelPinsUpdate);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_channel_pins_payload");
         }
         return;
       }
@@ -879,6 +893,8 @@ export class FluxerClient extends EventEmitter {
         const guild = this.#parseGatewayGuild(event);
         if (guild) {
           this.emit(event.type === "GUILD_CREATE" ? "guildCreate" : "guildUpdate", guild);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_guild_payload");
         }
         return;
       }
@@ -886,6 +902,8 @@ export class FluxerClient extends EventEmitter {
         const payload = event.data as { id?: string };
         if (payload.id) {
           this.emit("guildDelete", { id: payload.id });
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "missing_required_fields");
         }
         return;
       }
@@ -894,6 +912,8 @@ export class FluxerClient extends EventEmitter {
         const role = this.#parseGatewayRole(event);
         if (role) {
           this.emit(event.type === "GUILD_ROLE_CREATE" ? "roleCreate" : "roleUpdate", role);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_role_payload");
         }
         return;
       }
@@ -904,6 +924,8 @@ export class FluxerClient extends EventEmitter {
             guildId: payload.guild_id,
             id: payload.role_id
           });
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "missing_required_fields");
         }
         return;
       }
@@ -915,6 +937,8 @@ export class FluxerClient extends EventEmitter {
             event.type === "GUILD_MEMBER_ADD" ? "guildMemberAdd" : "guildMemberUpdate",
             member
           );
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_guild_member_payload");
         }
         return;
       }
@@ -929,6 +953,8 @@ export class FluxerClient extends EventEmitter {
             guildId: payload.guild_id,
             user
           });
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_guild_member_remove_payload");
         }
         return;
       }
@@ -944,6 +970,8 @@ export class FluxerClient extends EventEmitter {
             guildId: payload.guild_id,
             user
           });
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_ban_payload");
         }
         return;
       }
@@ -952,6 +980,8 @@ export class FluxerClient extends EventEmitter {
         const invite = this.#parseGatewayInvite(event);
         if (invite) {
           this.emit(event.type === "INVITE_CREATE" ? "inviteCreate" : "inviteDelete", invite);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_invite_payload");
         }
         return;
       }
@@ -959,6 +989,8 @@ export class FluxerClient extends EventEmitter {
         const presence = this.#parseGatewayPresence(event);
         if (presence) {
           this.emit("presenceUpdate", presence);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_presence_payload");
         }
         return;
       }
@@ -966,6 +998,8 @@ export class FluxerClient extends EventEmitter {
         const typingStart = this.#parseTypingStart(event);
         if (typingStart) {
           this.emit("typingStart", typingStart);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_typing_payload");
         }
         return;
       }
@@ -973,6 +1007,8 @@ export class FluxerClient extends EventEmitter {
         const user = this.#parseGatewayUser(event.data);
         if (user) {
           this.emit("userUpdate", user);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_user_payload");
         }
         return;
       }
@@ -980,6 +1016,8 @@ export class FluxerClient extends EventEmitter {
         const voiceState = this.#parseVoiceState(event);
         if (voiceState) {
           this.emit("voiceStateUpdate", voiceState);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_voice_state_payload");
         }
         return;
       }
@@ -987,6 +1025,8 @@ export class FluxerClient extends EventEmitter {
         const voiceServer = this.#parseVoiceServerUpdate(event);
         if (voiceServer) {
           this.emit("voiceServerUpdate", voiceServer);
+        } else {
+          this.#emitIgnoredGatewayDispatch(event, "invalid_voice_server_payload");
         }
         return;
       }
@@ -1010,6 +1050,22 @@ export class FluxerClient extends EventEmitter {
     this.emit("debug", {
       ...event,
       timestamp: event.timestamp ?? new Date().toISOString()
+    });
+  }
+
+  #emitIgnoredGatewayDispatch(
+    event: FluxerGatewayDispatchEvent,
+    reason: string
+  ): void {
+    this.emitDebug({
+      scope: "client",
+      event: "gateway_dispatch_ignored",
+      level: "warn",
+      data: {
+        type: event.type,
+        sequence: event.sequence,
+        reason
+      }
     });
   }
 

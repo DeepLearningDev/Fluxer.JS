@@ -924,6 +924,95 @@ test("maps channel gateway events with numeric channel types", async () => {
   ]);
 });
 
+test("emits warning debug events for malformed non-message gateway payloads", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const debugEvents: Array<{ event: string; level?: string; data?: Record<string, unknown> }> = [];
+  const domainEvents: string[] = [];
+
+  client.on("debug", (event) => {
+    debugEvents.push({
+      event: event.event,
+      level: event.level,
+      data: event.data as Record<string, unknown> | undefined
+    });
+  });
+
+  client.on("channelCreate", () => {
+    domainEvents.push("channelCreate");
+  });
+  client.on("messageDelete", () => {
+    domainEvents.push("messageDelete");
+  });
+  client.on("userUpdate", () => {
+    domainEvents.push("userUpdate");
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "CHANNEL_CREATE",
+    sequence: 8,
+    data: {
+      id: "broken_channel"
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "broken_channel"
+      },
+      s: 8,
+      t: "CHANNEL_CREATE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "MESSAGE_DELETE",
+    sequence: 9,
+    data: {
+      id: "msg_1"
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "msg_1"
+      },
+      s: 9,
+      t: "MESSAGE_DELETE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "USER_UPDATE",
+    sequence: 10,
+    data: {
+      id: "user_1"
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "user_1"
+      },
+      s: 10,
+      t: "USER_UPDATE"
+    }
+  });
+
+  assert.deepEqual(domainEvents, []);
+
+  const ignoredEvents = debugEvents.filter((event) => event.event === "gateway_dispatch_ignored");
+  assert.deepEqual(
+    ignoredEvents.map((event) => ({
+      level: event.level,
+      type: event.data?.type,
+      reason: event.data?.reason
+    })),
+    [
+      { level: "warn", type: "CHANNEL_CREATE", reason: "invalid_channel_payload" },
+      { level: "warn", type: "MESSAGE_DELETE", reason: "missing_required_fields" },
+      { level: "warn", type: "USER_UPDATE", reason: "invalid_user_payload" }
+    ]
+  );
+});
+
 test("maps role, reaction, and voice gateway events", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
