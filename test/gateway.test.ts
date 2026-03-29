@@ -1013,6 +1013,133 @@ test("emits warning debug events for malformed non-message gateway payloads", as
   );
 });
 
+test("drops non-message gateway events with malformed timestamps and emits warnings", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const debugEvents: Array<{ event: string; level?: string; data?: Record<string, unknown> }> = [];
+  const domainEvents: string[] = [];
+
+  client.on("debug", (event) => {
+    debugEvents.push({
+      event: event.event,
+      level: event.level,
+      data: event.data as Record<string, unknown> | undefined
+    });
+  });
+
+  client.on("guildMemberAdd", () => {
+    domainEvents.push("guildMemberAdd");
+  });
+  client.on("channelPinsUpdate", () => {
+    domainEvents.push("channelPinsUpdate");
+  });
+  client.on("inviteCreate", () => {
+    domainEvents.push("inviteCreate");
+  });
+  client.on("typingStart", () => {
+    domainEvents.push("typingStart");
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "GUILD_MEMBER_ADD",
+    sequence: 11,
+    data: {
+      guild_id: "guild_1",
+      joined_at: "not-a-date",
+      user: {
+        id: "user_1",
+        username: "fluxguy"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        guild_id: "guild_1",
+        joined_at: "not-a-date",
+        user: {
+          id: "user_1",
+          username: "fluxguy"
+        }
+      },
+      s: 11,
+      t: "GUILD_MEMBER_ADD"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "CHANNEL_PINS_UPDATE",
+    sequence: 12,
+    data: {
+      channel_id: "general",
+      last_pin_timestamp: "not-a-date"
+    },
+    raw: {
+      op: 0,
+      d: {
+        channel_id: "general",
+        last_pin_timestamp: "not-a-date"
+      },
+      s: 12,
+      t: "CHANNEL_PINS_UPDATE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "INVITE_CREATE",
+    sequence: 13,
+    data: {
+      code: "welcome123",
+      created_at: "not-a-date"
+    },
+    raw: {
+      op: 0,
+      d: {
+        code: "welcome123",
+        created_at: "not-a-date"
+      },
+      s: 13,
+      t: "INVITE_CREATE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "TYPING_START",
+    sequence: 14,
+    data: {
+      channel_id: "general",
+      user_id: "user_1",
+      timestamp: Number.NaN
+    },
+    raw: {
+      op: 0,
+      d: {
+        channel_id: "general",
+        user_id: "user_1",
+        timestamp: Number.NaN
+      },
+      s: 14,
+      t: "TYPING_START"
+    }
+  });
+
+  assert.deepEqual(domainEvents, []);
+
+  const ignoredEvents = debugEvents.filter((event) => event.event === "gateway_dispatch_ignored");
+  assert.deepEqual(
+    ignoredEvents.map((event) => ({
+      level: event.level,
+      type: event.data?.type,
+      reason: event.data?.reason
+    })),
+    [
+      { level: "warn", type: "GUILD_MEMBER_ADD", reason: "invalid_guild_member_payload" },
+      { level: "warn", type: "CHANNEL_PINS_UPDATE", reason: "invalid_channel_pins_payload" },
+      { level: "warn", type: "INVITE_CREATE", reason: "invalid_invite_payload" },
+      { level: "warn", type: "TYPING_START", reason: "invalid_typing_payload" }
+    ]
+  );
+});
+
 test("maps role, reaction, and voice gateway events", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);

@@ -1174,7 +1174,8 @@ export class FluxerClient extends EventEmitter {
     };
 
     const user = this.#parseGatewayUser(payload.user);
-    if (!payload.guild_id || !user) {
+    const joinedAt = this.#parseOptionalIsoDate(payload.joined_at);
+    if (!payload.guild_id || !user || joinedAt === null) {
       return null;
     }
 
@@ -1183,7 +1184,7 @@ export class FluxerClient extends EventEmitter {
       guildId: payload.guild_id,
       nickname: payload.nick,
       roles: payload.roles,
-      joinedAt: payload.joined_at ? new Date(payload.joined_at) : undefined
+      joinedAt
     };
   }
 
@@ -1218,7 +1219,8 @@ export class FluxerClient extends EventEmitter {
       timestamp?: number;
     };
 
-    if (!payload.channel_id || !payload.user_id) {
+    const startedAt = this.#parseOptionalUnixDate(payload.timestamp);
+    if (!payload.channel_id || !payload.user_id || startedAt === null) {
       return null;
     }
 
@@ -1226,7 +1228,7 @@ export class FluxerClient extends EventEmitter {
       channelId: payload.channel_id,
       userId: payload.user_id,
       guildId: payload.guild_id,
-      startedAt: typeof payload.timestamp === "number" ? new Date(payload.timestamp * 1000) : undefined
+      startedAt
     };
   }
 
@@ -1286,14 +1288,15 @@ export class FluxerClient extends EventEmitter {
       last_pin_timestamp?: string | null;
     };
 
-    if (!payload.channel_id) {
+    const lastPinTimestamp = this.#parseOptionalIsoDate(payload.last_pin_timestamp);
+    if (!payload.channel_id || lastPinTimestamp === null) {
       return null;
     }
 
     return {
       channelId: payload.channel_id,
       guildId: payload.guild_id,
-      lastPinTimestamp: payload.last_pin_timestamp ? new Date(payload.last_pin_timestamp) : undefined
+      lastPinTimestamp
     };
   }
 
@@ -1363,7 +1366,9 @@ export class FluxerClient extends EventEmitter {
       expires_at?: string | null;
     };
 
-    if (!payload.code) {
+    const createdAt = this.#parseOptionalIsoDate(payload.created_at);
+    const expiresAt = this.#parseOptionalIsoDate(payload.expires_at);
+    if (!payload.code || createdAt === null || expiresAt === null) {
       return null;
     }
 
@@ -1376,9 +1381,31 @@ export class FluxerClient extends EventEmitter {
       maxUses: payload.max_uses,
       maxAgeSeconds: payload.max_age,
       temporary: payload.temporary,
-      createdAt: payload.created_at ? new Date(payload.created_at) : undefined,
-      expiresAt: payload.expires_at ? new Date(payload.expires_at) : undefined
+      createdAt,
+      expiresAt
     };
+  }
+
+  #parseOptionalIsoDate(value: string | null | undefined): Date | undefined | null {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  #parseOptionalUnixDate(value: number | undefined): Date | undefined | null {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    const parsed = new Date(value * 1000);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   #parseGatewayUser(payload: unknown): FluxerUser | null {
