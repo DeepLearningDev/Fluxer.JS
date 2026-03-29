@@ -122,7 +122,9 @@ For the narrowest real-instance smoke path in this repo, set `FLUXER_INSTANCE_UR
 npm run dev:platform
 ```
 
-That example lives in `src/examples/real-instance-bootstrap.ts` and is documented in [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md). It is meant to prove bootstrap/connect confidence, not to stand in for a full live contract matrix.
+For the first real bot path, add `FLUXER_KEEP_ALIVE=1` and optionally `FLUXER_BOOTSTRAP_CHANNEL_ID`, then send `!ping` in a real text channel after connect.
+
+That example lives in `src/examples/real-instance-bootstrap.ts` and is documented in [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md) and [docs/FirstRealBot.md](./docs/FirstRealBot.md). It is meant to prove a narrow real bot path, not to stand in for a full live contract matrix.
 
 ## What You Get Today
 
@@ -149,6 +151,7 @@ Reference docs:
 - Changelog: [CHANGELOG.md](./CHANGELOG.md)
 - Release policy: [docs/ReleasePolicy.md](./docs/ReleasePolicy.md)
 - Real instance bootstrap: [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md)
+- First real bot: [docs/FirstRealBot.md](./docs/FirstRealBot.md)
 - API guarantees: [docs/ApiGuarantees.md](./docs/ApiGuarantees.md)
 - Gateway error codes: [docs/GatewayErrorCodes.md](./docs/GatewayErrorCodes.md)
 - REST error codes: [docs/RestErrorCodes.md](./docs/RestErrorCodes.md)

@@ -8,6 +8,8 @@ This is the narrowest honest path for checking Fluxer.JS against a real Fluxer i
 - gateway bootstrap succeeds
 - the client can connect
 - the current bot identity can be fetched
+- the repo can register a real `!ping` bot on the live transport path
+- an optional startup message can be sent into a real text channel
 
 It does **not** prove the full framework contract. It is a real-instance smoke path, not a full live contract matrix.
 
@@ -25,6 +27,7 @@ Optional:
 ```bash
 export FLUXER_INTENTS="513"
 export FLUXER_KEEP_ALIVE="1"
+export FLUXER_BOOTSTRAP_CHANNEL_ID="general"
 ```
 
 Then run:
@@ -38,7 +41,11 @@ If the bootstrap works, the script will:
 - print instance/bootstrap debug events
 - connect the client
 - fetch the current bot user
+- register a `!ping` command on a real `FluxerBot`
+- optionally send a startup message into `FLUXER_BOOTSTRAP_CHANNEL_ID`
 - disconnect automatically unless `FLUXER_KEEP_ALIVE=1`
+
+When `FLUXER_KEEP_ALIVE=1`, the script stays connected and tells you to send `!ping` in a real text channel to verify the first live reply.
 
 ## Failure Shape
 
@@ -53,3 +60,5 @@ Common examples:
 ## Why This Exists
 
 Fluxer.JS is still mock-first in tests. This script gives developers a concrete first-real-instance path without pretending the whole release gate is live-backed.
+
+For the fuller first live bot path, including reply verification and failure guidance, see [FirstRealBot.md](./FirstRealBot.md).
