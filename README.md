@@ -124,7 +124,13 @@ npm run dev:platform
 
 For the first real bot path, add `FLUXER_KEEP_ALIVE=1` and optionally `FLUXER_BOOTSTRAP_CHANNEL_ID`, then send `!ping` in a real text channel after connect.
 
-That example lives in `src/examples/real-instance-bootstrap.ts` and is documented in [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md) and [docs/FirstRealBot.md](./docs/FirstRealBot.md). It is meant to prove a narrow real bot path, not to stand in for a full live contract matrix.
+For a stronger repeatable live-instance check, set `FLUXER_CONTRACT_CHANNEL_ID` and run:
+
+```bash
+npm run dev:contract
+```
+
+That example lives in `src/examples/real-instance-bootstrap.ts` and `src/examples/live-instance-contract.ts` and is documented in [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md), [docs/FirstRealBot.md](./docs/FirstRealBot.md), and [docs/LiveInstanceContractHarness.md](./docs/LiveInstanceContractHarness.md). It is meant to prove a narrow live contract layer, not to stand in for a full live contract matrix.
 
 ## What You Get Today
 
@@ -152,6 +158,7 @@ Reference docs:
 - Release policy: [docs/ReleasePolicy.md](./docs/ReleasePolicy.md)
 - Real instance bootstrap: [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md)
 - First real bot: [docs/FirstRealBot.md](./docs/FirstRealBot.md)
+- Live instance contract harness: [docs/LiveInstanceContractHarness.md](./docs/LiveInstanceContractHarness.md)
 - API guarantees: [docs/ApiGuarantees.md](./docs/ApiGuarantees.md)
 - Gateway error codes: [docs/GatewayErrorCodes.md](./docs/GatewayErrorCodes.md)
 - REST error codes: [docs/RestErrorCodes.md](./docs/RestErrorCodes.md)

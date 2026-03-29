@@ -19,6 +19,7 @@ with pre-release channels while the framework is not yet stable.
 - the GitHub wiki now hosts the guide-layer docs, and the main repo README points there instead of carrying a duplicate local wiki layer
 - release verification now proves a packaged composed platform-transport smoke path instead of only checking the platform bootstrap surface at type level
 - the real-instance bootstrap example and docs now walk developers through the first live `!ping` path, optional startup messaging, and typed failure handling instead of treating the path as transport-only
+- the repo now exposes an opt-in live-instance contract harness that checks a real channel fetch, typing signal, probe send, and read-back through recent channel history
 
 ### Fixed
 

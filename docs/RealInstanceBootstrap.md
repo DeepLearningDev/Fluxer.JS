@@ -62,3 +62,5 @@ Common examples:
 Fluxer.JS is still mock-first in tests. This script gives developers a concrete first-real-instance path without pretending the whole release gate is live-backed.
 
 For the fuller first live bot path, including reply verification and failure guidance, see [FirstRealBot.md](./FirstRealBot.md).
+
+For a stronger repeatable live-instance check that also verifies channel reads and outbound probe visibility, see [LiveInstanceContractHarness.md](./LiveInstanceContractHarness.md).

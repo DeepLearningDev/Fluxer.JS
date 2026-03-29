@@ -168,3 +168,5 @@ Fluxer.JS now gives you a narrow but concrete first-real-bot path:
 - real reply verification after that
 
 That is a better onboarding shape than jumping straight from docs into a broad live contract promise.
+
+For a stronger repeatable instance check after the first real reply, see [LiveInstanceContractHarness.md](./LiveInstanceContractHarness.md).

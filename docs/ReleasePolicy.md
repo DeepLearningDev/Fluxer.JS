@@ -92,6 +92,8 @@ These checks are also enforced in GitHub Actions:
 
 `smoke:package` is intended to catch packaging regressions that `pack:dry-run` cannot catch by itself. It performs a real `npm pack`, installs the tarball into a temporary consumer project, imports the package through its published entrypoint, runs both a mock bot flow and a fake-instance composed platform-transport smoke through the public API, and typechecks a small TypeScript consumer against the published `.d.ts` surface.
 
+The repo also exposes an opt-in live harness through `npm run dev:contract` for real Fluxer instances. That harness is intentionally outside the default release gate because it depends on a live instance and real credentials.
+
 ## Changelog expectations
 
 Every release should update:
