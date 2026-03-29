@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { existsSync, readFileSync } from "node:fs";
 import {
   FluxerBot,
   FluxerClient,
@@ -47,6 +48,59 @@ interface ContractRunReport {
 }
 
 let currentReport: ContractRunReport | undefined;
+
+function loadEnvFiles(): string[] {
+  const candidates = [
+    ".env.contract.local",
+    ".env.contract",
+    ".env.local",
+    ".env"
+  ];
+  const loaded: string[] = [];
+
+  for (const candidate of candidates) {
+    const fullPath = path.resolve(process.cwd(), candidate);
+    if (!existsSync(fullPath)) {
+      continue;
+    }
+
+    const fileContent = readFileSync(fullPath, "utf8");
+    for (const line of fileContent.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0 || trimmed.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = trimmed.indexOf("=");
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const key = trimmed.slice(0, separatorIndex).trim();
+      const rawValue = trimmed.slice(separatorIndex + 1).trim();
+      if (!key || process.env[key] !== undefined) {
+        continue;
+      }
+
+      process.env[key] = normalizeEnvValue(rawValue);
+    }
+
+    loaded.push(candidate);
+  }
+
+  return loaded;
+}
+
+function normalizeEnvValue(value: string): string {
+  if (
+    (value.startsWith("\"") && value.endsWith("\""))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+
+  return value;
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -241,6 +295,7 @@ async function waitForProbeEcho(options: {
 }
 
 async function main(): Promise<void> {
+  const loadedEnvFiles = loadEnvFiles();
   const instanceUrl = requireEnv("FLUXER_INSTANCE_URL");
   const token = requireEnv("FLUXER_TOKEN");
   const channelId = requireEnv("FLUXER_CONTRACT_CHANNEL_ID");
@@ -259,6 +314,10 @@ async function main(): Promise<void> {
     reportPath
   });
   currentReport = report;
+
+  if (loadedEnvFiles.length > 0) {
+    console.log(`Loaded env files: ${loadedEnvFiles.join(", ")}`);
+  }
 
   const transport = await createFluxerPlatformTransport({
     instanceUrl,

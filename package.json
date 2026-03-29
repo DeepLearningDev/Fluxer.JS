@@ -28,6 +28,7 @@
     "start:minimal": "node dist/examples/minimal.js",
     "start:platform": "node dist/examples/real-instance-bootstrap.js",
     "start:contract": "node dist/examples/live-instance-contract.js",
+    "report:contract": "node scripts/summarize-live-contract-report.mjs",
     "smoke:minimal": "node dist/examples/minimal.js",
     "smoke:package": "node scripts/verify-package-install.mjs",
     "lint": "eslint .",

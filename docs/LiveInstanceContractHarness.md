@@ -24,6 +24,13 @@ export FLUXER_TOKEN="your-token"
 export FLUXER_CONTRACT_CHANNEL_ID="general"
 ```
 
+The harness also loads these files automatically when present:
+
+- `.env.contract.local`
+- `.env.contract`
+- `.env.local`
+- `.env`
+
 Optional:
 
 ```bash
@@ -59,6 +66,12 @@ If `FLUXER_CONTRACT_REPORT_PATH` is set, the harness also writes a JSON report w
 - current bot identity
 - probe content and confirmed message ID
 - typed failure metadata when the run fails
+
+You can turn that JSON artifact into a markdown summary with:
+
+```bash
+npm run report:contract -- ./artifacts/live-contract-report.json ./artifacts/live-contract-report.md
+```
 
 ## Failure Shape
 
