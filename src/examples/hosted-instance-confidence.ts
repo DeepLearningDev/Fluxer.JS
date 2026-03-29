@@ -5,9 +5,14 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   DiscoveryError,
   FluxerClient,
+  GatewayTransport,
+  GatewayTransportError,
+  PlatformTransport,
   RestTransport,
   RestTransportError,
   createInstanceInfo,
+  defaultParseDispatchEvent,
+  defaultParseMessageEvent,
   fetchInstanceDiscoveryDocument
 } from "../index.js";
 
@@ -165,13 +170,18 @@ function printUsage(): void {
   console.error("- FLUXER_HOSTED_REPORT_PATH or FLUXER_CONTRACT_REPORT_PATH");
 }
 
-function printTroubleshootingHint(error: DiscoveryError | RestTransportError | Error): void {
-  if (error instanceof DiscoveryError || error instanceof RestTransportError) {
+function printTroubleshootingHint(error: DiscoveryError | GatewayTransportError | RestTransportError | Error): void {
+  if (error instanceof DiscoveryError || error instanceof GatewayTransportError || error instanceof RestTransportError) {
     switch (error.code) {
       case "DISCOVERY_REQUEST_FAILED":
       case "DISCOVERY_HTTP_ERROR":
       case "DISCOVERY_RESPONSE_INVALID":
         console.error("Hint: verify FLUXER_INSTANCE_URL and confirm the discovery document is reachable from this machine.");
+        return;
+      case "GATEWAY_SOCKET_ERROR":
+      case "GATEWAY_RECONNECT_EXHAUSTED":
+      case "GATEWAY_IDENTIFY_UNAVAILABLE":
+        console.error("Hint: the hosted path now starts a gateway session before sending messages. Check websocket reachability, token validity, and whether the hosted gateway accepted the identify payload.");
         return;
       case "REST_HTTP_ERROR":
         console.error("Hint: the hosted confidence probe was rejected. Check channel access, token validity, and whether the channel ID is correct.");
@@ -195,7 +205,7 @@ function printTroubleshootingHint(error: DiscoveryError | RestTransportError | E
   }
 }
 
-function printTypedError(error: DiscoveryError | RestTransportError): void {
+function printTypedError(error: DiscoveryError | GatewayTransportError | RestTransportError): void {
   console.error(`[hosted] ${error.code}`);
   if (error.details) {
     console.error(error.details);
@@ -235,8 +245,8 @@ function createRunReport(options: {
   };
 }
 
-function createErrorRecord(error: DiscoveryError | RestTransportError | Error): HostedConfidenceReport["error"] {
-  if (error instanceof DiscoveryError || error instanceof RestTransportError) {
+function createErrorRecord(error: DiscoveryError | GatewayTransportError | RestTransportError | Error): HostedConfidenceReport["error"] {
+  if (error instanceof DiscoveryError || error instanceof GatewayTransportError || error instanceof RestTransportError) {
     return {
       name: error.name,
       message: error.message,
@@ -293,10 +303,35 @@ async function waitForProbeEcho(options: {
   throw new Error("Probe message was not observed in recent channel history before the hosted confidence timeout expired.");
 }
 
+async function waitForGatewayReady(client: FluxerClient, timeoutMs: number): Promise<void> {
+  const readyPromise = client.waitFor("gatewayStateChange", {
+    timeoutMs,
+    filter: ({ state }) => state === "ready"
+  });
+  const failedStatePromise = client.waitFor("gatewayStateChange", {
+    timeoutMs,
+    filter: ({ state }) => state === "reconnecting" || state === "disconnected"
+  }).then(({ state, reason }) => {
+    throw new Error(`Gateway left the session-start path before reaching ready. State=${state}${reason ? ` reason=${reason}` : ""}`);
+  });
+
+  await Promise.race([readyPromise, failedStatePromise]);
+}
+
 function listEnabledCapabilities(capabilities: object): string[] {
   return Object.entries(capabilities as Record<string, boolean>)
     .filter(([, enabled]) => enabled)
     .map(([name]) => name);
+}
+
+function resolveHostedGatewayUrl(baseUrl: string, apiCodeVersion: number): string {
+  const url = new URL(baseUrl);
+
+  if (!url.searchParams.has("v")) {
+    url.searchParams.set("v", String(apiCodeVersion));
+  }
+
+  return url.toString();
 }
 
 async function main(): Promise<void> {
@@ -364,15 +399,61 @@ async function main(): Promise<void> {
     console.log("This instance does not advertise gatewayBot. Running the hosted REST confidence path.");
   }
 
-  const transport = new RestTransport({
-    discovery,
-    auth: { token }
+  if (!instanceInfo.gatewayBaseUrl) {
+    throw new Error("Hosted confidence requires a gateway endpoint so the platform can start a session before sending messages.");
+  }
+  const gatewayUrl = resolveHostedGatewayUrl(instanceInfo.gatewayBaseUrl, instanceInfo.apiCodeVersion);
+
+  const transport = new PlatformTransport({
+    inbound: new GatewayTransport({
+      url: gatewayUrl,
+      auth: { token },
+      reconnect: {
+        maxAttempts: 0
+      },
+      buildIdentifyPayload: ({ auth }) => ({
+        op: 2,
+        d: {
+          token: auth?.token,
+          intents: 0,
+          properties: {
+            os: process.platform,
+            browser: "fluxer-js",
+            device: "fluxer-js"
+          }
+        }
+      }),
+      parseDispatchEvent: defaultParseDispatchEvent,
+      parseMessageEvent: defaultParseMessageEvent
+    }),
+    outbound: new RestTransport({
+      discovery,
+      auth: { token }
+    })
   });
   const client = new FluxerClient(transport);
 
-  recordStep(report, "connect_rest_transport", "started");
+  client.on("gatewayStateChange", ({ state }) => {
+    console.log(`Gateway state: ${state}`);
+  });
+
+  client.on("error", (error) => {
+    if (error instanceof GatewayTransportError || error instanceof RestTransportError) {
+      printTypedError(error);
+      printTroubleshootingHint(error);
+      return;
+    }
+
+    console.error(error);
+  });
+
+  recordStep(report, "connect_hosted_session", "started");
+  const gatewayReady = waitForGatewayReady(client, timeoutMs);
   await client.connect();
-  recordStep(report, "connect_rest_transport", "passed");
+  await gatewayReady;
+  recordStep(report, "connect_hosted_session", "passed", {
+    gatewayUrl
+  });
 
   recordStep(report, "fetch_current_user", "started");
   const currentUser = await client.fetchCurrentUser();
@@ -449,7 +530,7 @@ async function main(): Promise<void> {
 }
 
 main().catch(async (error) => {
-  if (error instanceof DiscoveryError || error instanceof RestTransportError) {
+  if (error instanceof DiscoveryError || error instanceof GatewayTransportError || error instanceof RestTransportError) {
     if (currentReport) {
       currentReport.status = "failed";
       currentReport.finishedAt = new Date().toISOString();

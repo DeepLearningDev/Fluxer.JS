@@ -50,7 +50,8 @@ export {
 } from "./core/Discovery.js";
 export {
   createInstanceInfo,
-  detectInstanceCapabilities
+  detectInstanceCapabilities,
+  resolveBotApiBaseUrl
 } from "./core/Instance.js";
 export {
   CommandSchemaError,

@@ -7,12 +7,13 @@ Use it when the official hosted Fluxer API is your target and the stronger bot-r
 ## What It Proves
 
 - discovery succeeds
+- a hosted gateway session can be started from the discovery gateway URL
 - the current bot identity can be fetched
 - the target channel can be fetched
 - outbound typing and outbound message send succeed
 - the sent probe shows up again through live channel reads
 
-This is intentionally narrower than the self-hosted live contract harness because it does not prove gateway bootstrap or bot-runtime command handling.
+This is intentionally narrower than the self-hosted live contract harness because it does not prove the stronger bot-gateway bootstrap path or bot-runtime command handling.
 
 ## Required Environment
 

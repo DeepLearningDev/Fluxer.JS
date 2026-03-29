@@ -1,6 +1,7 @@
 import { createBotAuthHeader, fetchInstanceDiscoveryDocument, normalizeBaseUrl } from "./Discovery.js";
 import { serializeMessagePayload, validateMessagePayload } from "./builders.js";
 import { RestTransportError } from "./errors.js";
+import { resolveBotApiBaseUrl } from "./Instance.js";
 import { BaseTransport } from "./Transport.js";
 import type {
   EditMessagePayload,
@@ -662,7 +663,7 @@ export class RestTransport extends BaseTransport {
     }
 
     if (this.#discovery) {
-      this.#baseUrl = normalizeBaseUrl(this.#discovery.endpoints.api);
+      this.#baseUrl = resolveBotApiBaseUrl(this.#discovery);
       return this.#baseUrl;
     }
 
@@ -697,7 +698,7 @@ export class RestTransport extends BaseTransport {
       });
     }
 
-    this.#baseUrl = normalizeBaseUrl(discovery.endpoints.api);
+    this.#baseUrl = resolveBotApiBaseUrl(discovery);
     return this.#baseUrl;
   }
 }

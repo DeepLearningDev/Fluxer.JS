@@ -330,6 +330,41 @@ test("emits typed diagnostics when discovery fetch fails", async () => {
   });
 });
 
+test("prefers api_public from discovery for bot-auth rest requests", async () => {
+  const requests: string[] = [];
+
+  const transport = new RestTransport({
+    discovery: {
+      api_code_version: 1,
+      endpoints: {
+        api: "https://fluxer.local/api",
+        api_client: "https://fluxer.local/client-api",
+        api_public: "https://fluxer.local/public-api",
+        gateway: "wss://fluxer.local/gateway",
+        media: "https://fluxer.local/media",
+        static_cdn: "https://fluxer.local/cdn",
+        marketing: "https://fluxer.local",
+        admin: "https://fluxer.local/admin",
+        invite: "https://fluxer.local/invite",
+        gift: "https://fluxer.local/gift",
+        webapp: "https://fluxer.local/app"
+      },
+      features: {
+        gateway_bot: true
+      }
+    },
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return createRestCurrentUserResponse();
+    }
+  });
+
+  const user = await transport.fetchCurrentUser();
+
+  assert.equal(user.id, "bot_1");
+  assert.equal(requests[0], "https://fluxer.local/public-api/v1/users/@me");
+});
+
 test("emits typed diagnostics when rest requests fail before a response", async () => {
   const transport = new RestTransport({
     baseUrl: "https://fluxer.local/api",

@@ -7,6 +7,10 @@ import type {
 
 const HOSTED_API_URL = "https://api.fluxer.app";
 
+export function resolveBotApiBaseUrl(discovery: FluxerInstanceDiscoveryDocument): string {
+  return normalizeBaseUrl(discovery.endpoints.api_public || discovery.endpoints.api);
+}
+
 export function detectInstanceCapabilities(
   discovery: FluxerInstanceDiscoveryDocument
 ): FluxerInstanceCapabilities {
@@ -36,7 +40,7 @@ export function createInstanceInfo(options: {
   return {
     instanceUrl: normalizedInstanceUrl,
     discoveryUrl: resolveDiscoveryUrl(normalizedInstanceUrl),
-    apiBaseUrl: normalizeBaseUrl(options.discovery.endpoints.api),
+    apiBaseUrl: resolveBotApiBaseUrl(options.discovery),
     gatewayBaseUrl: options.discovery.endpoints.gateway
       ? normalizeBaseUrl(options.discovery.endpoints.gateway)
       : undefined,

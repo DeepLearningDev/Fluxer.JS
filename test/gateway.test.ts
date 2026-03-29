@@ -14,8 +14,8 @@ class FakeWebSocket {
   static readonly CLOSED = 3;
   public readyState = FakeWebSocket.CONNECTING;
   public readonly sent: string[] = [];
-  readonly #listeners = new Map<string, Array<(event?: { data?: unknown }) => void>>();
-  public addEventListener(type: string, listener: (event?: { data?: unknown }) => void): void {
+  readonly #listeners = new Map<string, Array<(event?: { data?: unknown; code?: number; reason?: string; wasClean?: boolean }) => void>>();
+  public addEventListener(type: string, listener: (event?: { data?: unknown; code?: number; reason?: string; wasClean?: boolean }) => void): void {
     const listeners = this.#listeners.get(type) ?? [];
     listeners.push(listener);
     this.#listeners.set(type, listeners);
@@ -26,6 +26,10 @@ class FakeWebSocket {
   public close(): void {
     this.readyState = FakeWebSocket.CLOSED;
     this.#emit('close');
+  }
+  public emitClose(options?: { code?: number; reason?: string; wasClean?: boolean }): void {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.#emit('close', options);
   }
   public emitOpen(): void {
     this.readyState = FakeWebSocket.OPEN;
@@ -40,7 +44,7 @@ class FakeWebSocket {
   public emitError(): void {
     this.#emit('error');
   }
-  #emit(type: string, event?: { data?: unknown }): void {
+  #emit(type: string, event?: { data?: unknown; code?: number; reason?: string; wasClean?: boolean }): void {
     for (const listener of this.#listeners.get(type) ?? []) {
       listener(event);
     }
@@ -199,7 +203,7 @@ test("creates platform transport from provided discovery and reports instance in
   const detectedEvent = debugEvents.find((event) => event.event === "instance_detected");
   assert.deepEqual(detectedEvent?.data, {
     instanceUrl: "https://fluxer.local",
-    apiBaseUrl: "https://fluxer.local/api",
+    apiBaseUrl: "https://fluxer.local/public-api",
     apiCodeVersion: 7,
     isSelfHosted: true,
     capabilities: [
@@ -214,7 +218,7 @@ test("creates platform transport from provided discovery and reports instance in
   const bootstrappedEvent = debugEvents.find((event) => event.event === "platform_transport_bootstrapped");
   assert.deepEqual(bootstrappedEvent?.data, {
     instanceUrl: "https://fluxer.local",
-    apiBaseUrl: "https://fluxer.local/api",
+    apiBaseUrl: "https://fluxer.local/public-api",
     gatewayUrl: "wss://fluxer.local/gateway/bot"
   });
 });
@@ -297,7 +301,7 @@ test("emits typed diagnostics when gateway info bootstrap fails", async () => {
     assert.equal(error.code, "PLATFORM_GATEWAY_INFO_FAILED");
     assert.equal(error.retryable, true);
     assert.equal(error.details?.instanceUrl, "https://fluxer.local");
-    assert.equal(error.details?.apiBaseUrl, "https://fluxer.local/api");
+    assert.equal(error.details?.apiBaseUrl, "https://fluxer.local/public-api");
     assert.match(String(error.details?.message), /503 Service Unavailable/);
     return true;
   });
@@ -305,7 +309,7 @@ test("emits typed diagnostics when gateway info bootstrap fails", async () => {
   const detectedEvent = debugEvents.find((event) => event.event === "instance_detected");
   assert.deepEqual(detectedEvent?.data, {
     instanceUrl: "https://fluxer.local",
-    apiBaseUrl: "https://fluxer.local/api",
+    apiBaseUrl: "https://fluxer.local/public-api",
     apiCodeVersion: 7,
     isSelfHosted: true,
     capabilities: ["invites", "media", "gateway", "gatewayBot", "botAuth", "attachments"]
@@ -313,7 +317,7 @@ test("emits typed diagnostics when gateway info bootstrap fails", async () => {
   const debugEvent = debugEvents.find((event) => event.event === "platform_transport_gateway_info_failed");
   assert.deepEqual(debugEvent?.data, {
     instanceUrl: "https://fluxer.local",
-    apiBaseUrl: "https://fluxer.local/api",
+    apiBaseUrl: "https://fluxer.local/public-api",
     message: "Failed to fetch Fluxer gateway bootstrap information: 503 Service Unavailable"
   });
 });
@@ -372,7 +376,7 @@ test("blocks platform transport bootstrap when discovery lacks a gateway endpoin
   const detectedEvent = debugEvents.find((event) => event.event === "instance_detected");
   assert.deepEqual(detectedEvent?.data, {
     instanceUrl: "https://fluxer.local",
-    apiBaseUrl: "https://fluxer.local/api",
+    apiBaseUrl: "https://fluxer.local/public-api",
     apiCodeVersion: 7,
     isSelfHosted: true,
     capabilities: ["invites", "media", "gatewayBot", "botAuth", "attachments"]
@@ -1715,6 +1719,64 @@ test("emits typed diagnostics when reconnect attempts are exhausted", async () =
   assert.ok(error instanceof GatewayTransportError);
   assert.equal(error.retryable, false);
   assert.equal(error.details?.maxAttempts, 0);
+});
+
+test("includes close details when the gateway disconnects unexpectedly", async () => {
+  const sockets: FakeWebSocket[] = [];
+  const errors: Error[] = [];
+
+  const transport = new GatewayTransport({
+    url: "wss://gateway.fluxer.test",
+    auth: { token: "bot-token" },
+    reconnect: {
+      maxAttempts: 0
+    },
+    webSocketFactory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    buildIdentifyPayload: ({ auth }) => ({
+      op: 2,
+      d: { token: auth?.token }
+    }),
+    parseMessageEvent: () => null
+  });
+
+  transport.onError((error) => {
+    errors.push(error);
+  });
+
+  const connectPromise = transport.connect();
+  await flushAsyncWork();
+  const socket = sockets[0];
+  socket.emitOpen();
+  await connectPromise;
+
+  socket.emitClose({
+    code: 4001,
+    reason: "Auth failed",
+    wasClean: false
+  });
+
+  await waitForCondition(() =>
+    errors.some((candidate) =>
+      candidate instanceof GatewayTransportError
+      && candidate.code === "GATEWAY_DISCONNECTED"
+    ), {
+      message: "Expected disconnect to emit a typed transport error."
+    }
+  );
+
+  const error = errors.find((candidate) =>
+    candidate instanceof GatewayTransportError
+    && candidate.code === "GATEWAY_DISCONNECTED"
+  );
+
+  assert.ok(error instanceof GatewayTransportError);
+  assert.equal(error.details?.closeCode, 4001);
+  assert.equal(error.details?.closeReason, "Auth failed");
+  assert.equal(error.details?.wasClean, false);
 });
 
 

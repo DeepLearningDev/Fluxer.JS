@@ -154,7 +154,7 @@ export class GatewayTransport extends BaseTransport {
         }
       });
 
-      socket.addEventListener("close", async () => {
+      socket.addEventListener("close", async (event) => {
         this.#socket = undefined;
         this.#stopHeartbeat();
         if (!settled) {
@@ -175,9 +175,19 @@ export class GatewayTransport extends BaseTransport {
               message: "GatewayTransport disconnected unexpectedly.",
               code: "GATEWAY_DISCONNECTED",
               state: this.#state,
-              retryable: true
+              retryable: true,
+              details: {
+                closeCode: typeof event?.code === "number" ? event.code : undefined,
+                closeReason: typeof event?.reason === "string" && event.reason.length > 0 ? event.reason : undefined,
+                wasClean: typeof event?.wasClean === "boolean" ? event.wasClean : undefined
+              }
             })
           );
+          await this.#emitDebugEvent("socket_close", {
+            closeCode: typeof event?.code === "number" ? event.code : undefined,
+            closeReason: typeof event?.reason === "string" && event.reason.length > 0 ? event.reason : undefined,
+            wasClean: typeof event?.wasClean === "boolean" ? event.wasClean : undefined
+          });
           await this.#setState("reconnecting", "socket_close");
           this.#scheduleReconnect();
         } else {
