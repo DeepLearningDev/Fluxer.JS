@@ -171,6 +171,7 @@ Reference docs:
 - First real bot: [docs/FirstRealBot.md](./docs/FirstRealBot.md)
 - Live instance contract harness: [docs/LiveInstanceContractHarness.md](./docs/LiveInstanceContractHarness.md)
 - Hosted instance confidence: [docs/HostedInstanceConfidence.md](./docs/HostedInstanceConfidence.md)
+- Waits and collectors: [docs/WaitsAndCollectors.md](./docs/WaitsAndCollectors.md)
 - API guarantees: [docs/ApiGuarantees.md](./docs/ApiGuarantees.md)
 - Gateway error codes: [docs/GatewayErrorCodes.md](./docs/GatewayErrorCodes.md)
 - REST error codes: [docs/RestErrorCodes.md](./docs/RestErrorCodes.md)

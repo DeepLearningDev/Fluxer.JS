@@ -20,11 +20,13 @@ with pre-release channels while the framework is not yet stable.
 - release verification now proves a packaged composed platform-transport smoke path instead of only checking the platform bootstrap surface at type level
 - the real-instance bootstrap example and docs now walk developers through the first live `!ping` path, optional startup messaging, and typed failure handling instead of treating the path as transport-only
 - the repo now exposes an opt-in live-instance contract harness that checks a real channel fetch, typing signal, probe send, and read-back through recent channel history
+- wait and collector guidance now has a dedicated guide in both the repo docs and the GitHub wiki
 
 ### Fixed
 
 - the default `MESSAGE_CREATE` parser now rejects malformed payloads with typed `GATEWAY_MESSAGE_CREATE_INVALID` diagnostics instead of constructing partially trusted message objects
 - gateway tests now exercise the default inbound message parser directly so the real ingress path is covered instead of only parser overrides
+- `waitFor(...)` and message collectors now remove their abort listeners after settling, and `awaitReply(...)` abort behavior is covered directly in tests
 
 ## [0.1.0-alpha.1] - 2026-03-18
 

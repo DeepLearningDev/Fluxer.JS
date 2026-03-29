@@ -40,6 +40,7 @@ import { createEssentialsPlugin } from '../src/plugins/essentials.js';
 import { FluxerTestRuntime } from '../src/testing/TestRuntime.js';
 import { createTestGatewayDispatch, createTestMessage } from '../src/testing/fixtures.js';
 import type { FluxerCommand, FluxerMessage, SendMessagePayload } from '../src/core/types.js';
+
 function createMessage(content: string, overrides: Partial<FluxerMessage> = {}): FluxerMessage {
   return {
     id: 'msg_1',
@@ -56,7 +57,30 @@ function createMessage(content: string, overrides: Partial<FluxerMessage> = {}):
     createdAt: new Date(),
     ...overrides
   };
-}test("runs middleware before executing commands", async () => {
+}
+
+function createAbortSignalSpy() {
+  const listeners = new Set<() => void>();
+
+  return {
+    signal: {
+      aborted: false,
+      addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+        if (typeof listener === "function") {
+          listeners.add(listener as () => void);
+        }
+      },
+      removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+        if (typeof listener === "function") {
+          listeners.delete(listener as () => void);
+        }
+      }
+    } as unknown as AbortSignal,
+    listenerCount: () => listeners.size
+  };
+}
+
+test("runs middleware before executing commands", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
   const calls: string[] = [];
@@ -690,6 +714,27 @@ test("rejects waitForMessage immediately when the abort signal is already aborte
   });
 });
 
+test("waitFor removes abort listeners after resolving", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const spy = createAbortSignalSpy();
+
+  await client.connect();
+
+  const waitPromise = client.waitFor("messageCreate", {
+    signal: spy.signal
+  });
+
+  assert.equal(spy.listenerCount(), 1);
+
+  await transport.injectMessage(createMessage("hello", {
+    id: "msg_wait_cleanup"
+  }));
+  await waitPromise;
+
+  assert.equal(spy.listenerCount(), 0);
+});
+
 test("collects messages until the max is reached", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
@@ -754,6 +799,27 @@ test("collectors stop on abort signals", async () => {
     result.collected.map((message) => message.content),
     ["first"]
   );
+});
+
+test("collectors remove abort listeners after ending", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const spy = createAbortSignalSpy();
+
+  await client.connect();
+
+  const collector = client.createMessageCollector({
+    channelId: "general",
+    max: 1,
+    signal: spy.signal
+  });
+
+  assert.equal(spy.listenerCount(), 1);
+
+  await transport.injectMessage(createMessage("first"));
+  await collector.wait();
+
+  assert.equal(spy.listenerCount(), 0);
 });
 
 test("waitForMessage ignores bot messages by default and can opt in", async () => {
@@ -954,6 +1020,61 @@ test("awaitReply defaults to the invoking author and channel", async () => {
   await commandPromise;
   assert.equal(confirmation.channelId, "general");
   assert.equal(confirmation.content, "confirmed:msg_valid_reply");
+});
+
+test("awaitReply propagates typed abort errors", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const controller = new AbortController();
+  const replies: Array<Omit<SendMessagePayload, "channelId">> = [];
+  const errors: Error[] = [];
+
+  client.sendMessage = async (_channelId, message) => {
+    if (typeof message === "string") {
+      replies.push({ content: message });
+      return;
+    }
+
+    if ("toJSON" in message && typeof message.toJSON === "function") {
+      replies.push(message.toJSON());
+      return;
+    }
+
+    replies.push(message as Omit<SendMessagePayload, "channelId">);
+  };
+
+  client.on("error", (error) => {
+    errors.push(error);
+  });
+
+  const bot = new FluxerBot({
+    name: "ConversationBot",
+    prefix: "!"
+  });
+
+  bot.command({
+    name: "confirm",
+    execute: async ({ reply, awaitReply }) => {
+      await reply("Reply with yes to confirm.");
+      await awaitReply({
+        timeoutMs: 1000,
+        signal: controller.signal
+      });
+    }
+  });
+
+  client.registerBot(bot);
+  await client.connect();
+
+  const commandPromise = transport.injectMessage(createMessage("!confirm"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.abort();
+  await commandPromise;
+
+  assert.equal(replies[0]?.content, "Reply with yes to confirm.");
+  assert.equal(errors.length, 1);
+  assert.ok(errors[0] instanceof FluxerError);
+  assert.equal((errors[0] as FluxerError).code, "WAIT_FOR_ABORTED");
 });
 
 test("matches commands case-insensitively by default", async () => {

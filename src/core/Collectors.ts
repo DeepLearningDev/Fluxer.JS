@@ -18,6 +18,8 @@ export class FluxerMessageCollector extends EventEmitter {
   readonly #options: FluxerMessageCollectorOptions;
   readonly #collected: FluxerMessage[] = [];
   readonly #listener: (message: FluxerMessage) => Promise<void>;
+  readonly #abortSignal?: AbortSignal;
+  readonly #abortListener?: () => void;
   #ended = false;
   #timeoutTimer?: ReturnType<typeof setTimeout>;
   #idleTimer?: ReturnType<typeof setTimeout>;
@@ -39,14 +41,16 @@ export class FluxerMessageCollector extends EventEmitter {
     this.#armTimers();
 
     if (options.signal) {
+      this.#abortSignal = options.signal;
       if (options.signal.aborted) {
         this.stop("abort");
         return;
       }
 
-      options.signal.addEventListener("abort", () => {
+      this.#abortListener = () => {
         this.stop("abort");
-      }, { once: true });
+      };
+      options.signal.addEventListener("abort", this.#abortListener, { once: true });
     }
   }
 
@@ -69,6 +73,9 @@ export class FluxerMessageCollector extends EventEmitter {
     this.#ended = true;
     this.#clearTimers();
     this.#client.off("messageCreate", this.#listener);
+    if (this.#abortSignal && this.#abortListener) {
+      this.#abortSignal.removeEventListener("abort", this.#abortListener);
+    }
 
     const result = {
       collected: this.collected,
@@ -140,11 +147,15 @@ export async function waitForEvent<E extends EventKey>(
 ): Promise<FluxerEventMap[E]> {
   return new Promise<FluxerEventMap[E]>((resolve, reject) => {
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
 
     const cleanup = (): void => {
       client.off(eventName, listener);
       if (timeoutTimer) {
         clearTimeout(timeoutTimer);
+      }
+      if (options.signal && abortListener) {
+        options.signal.removeEventListener("abort", abortListener);
       }
     };
 
@@ -179,10 +190,11 @@ export async function waitForEvent<E extends EventKey>(
         return;
       }
 
-      options.signal.addEventListener("abort", () => {
+      abortListener = () => {
         cleanup();
         reject(createWaitForAbortError(eventName));
-      }, { once: true });
+      };
+      options.signal.addEventListener("abort", abortListener, { once: true });
     }
   });
 }

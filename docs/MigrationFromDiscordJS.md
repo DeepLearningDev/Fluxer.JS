@@ -19,6 +19,7 @@ If you know `discord.js`, the closest matching ideas are:
 - self-hosted instance discovery and capability handling are part of the core package.
 - transport boundaries are explicit: mock, REST, gateway, and composed platform transports are separate abstractions.
 - raw gateway dispatch access remains available even when normalized events exist.
+- wait and collector flows use `timeoutMs` plus `AbortSignal` instead of mirroring `discord.js` collector APIs exactly.
 
 Current alpha caveats for `discord.js` users:
 
@@ -76,4 +77,5 @@ Instead of hand-building message objects repeatedly, prefer:
 - use `src/examples/real-instance-bootstrap.ts`, `docs/RealInstanceBootstrap.md`, and `docs/FirstRealBot.md` as the first honest live-bot path once your mock bot works locally
 - use `gatewayDispatch` for platform events that are not normalized yet
 - move rich payload helpers into builders/templates early so commands stay small
+- use `docs/WaitsAndCollectors.md` when porting reply-driven `discord.js` flows so abort and timeout behavior stay explicit
 - use `FluxerTestRuntime` to lock framework behavior down while migrating larger bots, but treat it as a mock-first harness rather than a live Fluxer contract test layer
