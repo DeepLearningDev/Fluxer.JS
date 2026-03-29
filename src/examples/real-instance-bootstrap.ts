@@ -68,7 +68,7 @@ function printTroubleshootingHint(
       console.error("Hint: discovery worked, but gateway bootstrap failed. Check token validity, API reachability, and instance gateway support.");
       return;
     case "INSTANCE_CAPABILITY_UNSUPPORTED":
-      console.error("Hint: this instance does not advertise the capabilities needed for platform transport bootstrap.");
+      console.error("Hint: this instance does not advertise the capabilities needed for platform transport bootstrap. If you are targeting the official hosted Fluxer platform, use `npm run dev:hosted` instead.");
       return;
     case "REST_HTTP_ERROR":
       console.error("Hint: the bootstrap connected, but the outbound REST call was rejected. Check channel access, bot permissions, and payload validity.");

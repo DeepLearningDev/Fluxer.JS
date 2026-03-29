@@ -1,6 +1,6 @@
 # Live Instance Contract Harness
 
-This is the narrowest repeatable live-instance confidence layer in the repo.
+This is the stronger repeatable self-hosted or bot-gateway-capable live-instance confidence layer in the repo.
 
 Use it after the first-real-bot path already makes sense.
 
@@ -19,7 +19,7 @@ This is stronger than the first bootstrap smoke, but it is still not a full live
 ## Required Environment
 
 ```bash
-export FLUXER_INSTANCE_URL="https://api.fluxer.app"
+export FLUXER_INSTANCE_URL="https://your-self-hosted-fluxer-api"
 export FLUXER_TOKEN="your-token"
 export FLUXER_CONTRACT_CHANNEL_ID="general"
 ```
@@ -47,6 +47,10 @@ export FLUXER_CONTRACT_REPORT_PATH="./artifacts/live-contract-report.json"
 ```bash
 npm run dev:contract
 ```
+
+This path currently expects an instance that advertises both `gateway` and `gatewayBot`.
+
+If you are targeting the official hosted Fluxer API and only need an honest live read/write confidence path, use [`HostedInstanceConfidence.md`](./HostedInstanceConfidence.md) and run `npm run dev:hosted` instead.
 
 If the harness succeeds, it will:
 
@@ -99,7 +103,10 @@ Use `dev:contract` when you want a stronger repeatable real-instance check that 
 - outbound write
 - read-back through live channel history
 
+Use `dev:hosted` when you are targeting the official hosted Fluxer platform and need the narrower read/write confidence path without gateway-bot requirements.
+
 ## Related Guides
 
 - [RealInstanceBootstrap.md](./RealInstanceBootstrap.md)
 - [FirstRealBot.md](./FirstRealBot.md)
+- [HostedInstanceConfidence.md](./HostedInstanceConfidence.md)

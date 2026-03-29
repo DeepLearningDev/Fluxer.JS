@@ -1,0 +1,89 @@
+# Hosted Instance Confidence
+
+This is the honest hosted-platform confidence path in the repo.
+
+Use it when the official hosted Fluxer API is your target and the stronger bot-runtime harness is not available because the hosted platform does not advertise `gatewayBot`.
+
+## What It Proves
+
+- discovery succeeds
+- the current bot identity can be fetched
+- the target channel can be fetched
+- outbound typing and outbound message send succeed
+- the sent probe shows up again through live channel reads
+
+This is intentionally narrower than the self-hosted live contract harness because it does not prove gateway bootstrap or bot-runtime command handling.
+
+## Required Environment
+
+```bash
+export FLUXER_INSTANCE_URL="https://api.fluxer.app"
+export FLUXER_TOKEN="your-token"
+export FLUXER_CONTRACT_CHANNEL_ID="general"
+```
+
+The hosted path also auto-loads these files automatically when present:
+
+- `.env.contract.local`
+- `.env.contract`
+- `.env.local`
+- `.env`
+
+Optional:
+
+```bash
+export FLUXER_HOSTED_LIST_LIMIT="10"
+export FLUXER_HOSTED_TIMEOUT_MS="5000"
+export FLUXER_HOSTED_MESSAGE_PREFIX="Fluxer.JS hosted confidence probe"
+export FLUXER_HOSTED_REPORT_PATH="./artifacts/hosted-confidence-report.json"
+```
+
+Fallback compatibility:
+
+- `FLUXER_CONTRACT_LIST_LIMIT`
+- `FLUXER_CONTRACT_TIMEOUT_MS`
+- `FLUXER_CONTRACT_MESSAGE_PREFIX`
+- `FLUXER_CONTRACT_REPORT_PATH`
+
+## Run It
+
+```bash
+npm run dev:hosted
+```
+
+If the hosted path succeeds, it will:
+
+- discover the instance
+- fetch the current bot user
+- fetch the contract channel
+- send a typing indicator
+- send a unique probe message
+- verify that the same probe appears in recent channel history
+
+If `FLUXER_HOSTED_REPORT_PATH` is set, the path also writes a JSON report with:
+
+- run timestamps
+- instance capability snapshot
+- current bot identity
+- probe content and confirmed message ID
+- typed failure metadata when the run fails
+
+You can turn that JSON artifact into a markdown summary with:
+
+```bash
+npm run report:contract -- ./artifacts/hosted-confidence-report.json ./artifacts/hosted-confidence-report.md
+```
+
+## When To Use This
+
+Use `dev:platform` when you want the first honest live connect path.
+
+Use `dev:contract` when you are targeting a self-hosted or otherwise bot-gateway-capable instance and you want the stronger full bot-runtime contract.
+
+Use `dev:hosted` when you are targeting the official hosted Fluxer platform and want an honest read/write confidence path without pretending gateway-bot support exists.
+
+## Related Guides
+
+- [RealInstanceBootstrap.md](./RealInstanceBootstrap.md)
+- [FirstRealBot.md](./FirstRealBot.md)
+- [LiveInstanceContractHarness.md](./LiveInstanceContractHarness.md)

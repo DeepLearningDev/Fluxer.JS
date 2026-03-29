@@ -124,7 +124,7 @@ npm run dev:platform
 
 For the first real bot path, add `FLUXER_KEEP_ALIVE=1` and optionally `FLUXER_BOOTSTRAP_CHANNEL_ID`, then send `!ping` in a real text channel after connect.
 
-For a stronger repeatable live-instance check, set `FLUXER_CONTRACT_CHANNEL_ID` and run:
+For a stronger repeatable self-hosted or bot-gateway-capable live-instance check, set `FLUXER_CONTRACT_CHANNEL_ID` and run:
 
 ```bash
 npm run dev:contract
@@ -133,7 +133,15 @@ npm run dev:contract
 Set `FLUXER_CONTRACT_REPORT_PATH` as well if you want the harness to write a JSON report artifact for the run.
 The harness also auto-loads `.env.contract.local`, `.env.contract`, `.env.local`, and `.env` when those files exist.
 
-That example lives in `src/examples/real-instance-bootstrap.ts` and `src/examples/live-instance-contract.ts` and is documented in [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md), [docs/FirstRealBot.md](./docs/FirstRealBot.md), and [docs/LiveInstanceContractHarness.md](./docs/LiveInstanceContractHarness.md). It is meant to prove a narrow live contract layer, not to stand in for a full live contract matrix.
+If you are targeting the official hosted Fluxer platform and need an honest hosted read/write confidence path without `gatewayBot`, run:
+
+```bash
+npm run dev:hosted
+```
+
+That path also supports `FLUXER_HOSTED_REPORT_PATH` and is documented in [docs/HostedInstanceConfidence.md](./docs/HostedInstanceConfidence.md).
+
+These examples live in `src/examples/real-instance-bootstrap.ts`, `src/examples/live-instance-contract.ts`, and `src/examples/hosted-instance-confidence.ts` and are documented in [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md), [docs/FirstRealBot.md](./docs/FirstRealBot.md), [docs/LiveInstanceContractHarness.md](./docs/LiveInstanceContractHarness.md), and [docs/HostedInstanceConfidence.md](./docs/HostedInstanceConfidence.md). They are meant to prove narrow live confidence layers, not to stand in for a full live contract matrix.
 
 ## What You Get Today
 
@@ -162,6 +170,7 @@ Reference docs:
 - Real instance bootstrap: [docs/RealInstanceBootstrap.md](./docs/RealInstanceBootstrap.md)
 - First real bot: [docs/FirstRealBot.md](./docs/FirstRealBot.md)
 - Live instance contract harness: [docs/LiveInstanceContractHarness.md](./docs/LiveInstanceContractHarness.md)
+- Hosted instance confidence: [docs/HostedInstanceConfidence.md](./docs/HostedInstanceConfidence.md)
 - API guarantees: [docs/ApiGuarantees.md](./docs/ApiGuarantees.md)
 - Gateway error codes: [docs/GatewayErrorCodes.md](./docs/GatewayErrorCodes.md)
 - REST error codes: [docs/RestErrorCodes.md](./docs/RestErrorCodes.md)

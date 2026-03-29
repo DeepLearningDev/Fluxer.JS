@@ -3,30 +3,29 @@ import path from "node:path";
 import process from "node:process";
 import { existsSync, readFileSync } from "node:fs";
 import {
-  FluxerBot,
+  DiscoveryError,
   FluxerClient,
-  GatewayTransportError,
-  PlatformBootstrapError,
+  RestTransport,
   RestTransportError,
-  createFluxerPlatformTransport
+  createInstanceInfo,
+  fetchInstanceDiscoveryDocument
 } from "../index.js";
 
-type ContractStepStatus = "started" | "passed" | "failed";
+type ConfidenceStepStatus = "started" | "passed" | "failed";
 
-interface ContractStepRecord {
+interface ConfidenceStepRecord {
   name: string;
-  status: ContractStepStatus;
+  status: ConfidenceStepStatus;
   timestamp: string;
   details?: Record<string, unknown>;
 }
 
-interface ContractRunReport {
+interface HostedConfidenceReport {
   startedAt: string;
   finishedAt?: string;
   status: "running" | "passed" | "failed";
   instanceUrl?: string;
   channelId?: string;
-  keepAlive: boolean;
   listLimit: number;
   timeoutMs: number;
   reportPath?: string;
@@ -34,11 +33,16 @@ interface ContractRunReport {
     id: string;
     username: string;
   };
+  instance?: {
+    apiBaseUrl?: string;
+    isSelfHosted?: boolean;
+    capabilities: string[];
+  };
   probe?: {
     content: string;
     confirmedMessageId?: string;
   };
-  steps: ContractStepRecord[];
+  steps: ConfidenceStepRecord[];
   error?: {
     name: string;
     message: string;
@@ -47,7 +51,7 @@ interface ContractRunReport {
   };
 }
 
-let currentReport: ContractRunReport | undefined;
+let currentReport: HostedConfidenceReport | undefined;
 
 function loadEnvFiles(): string[] {
   const candidates = [
@@ -120,9 +124,19 @@ function optionalEnv(name: string): string | undefined {
   return value.trim();
 }
 
-function parseIntEnv(name: string, fallback: number): number {
-  const value = process.env[name];
-  if (!value || value.trim().length === 0) {
+function optionalEnvFromNames(names: string[]): string | undefined {
+  for (const name of names) {
+    const value = optionalEnv(name);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number, name: string): number {
+  if (!value) {
     return fallback;
   }
 
@@ -139,48 +153,37 @@ function sleep(ms: number): Promise<void> {
 }
 
 function printUsage(): void {
-  console.error("Fluxer.JS live-instance contract harness");
+  console.error("Fluxer.JS hosted-instance confidence path");
   console.error("Required env:");
   console.error("- FLUXER_INSTANCE_URL");
   console.error("- FLUXER_TOKEN");
   console.error("- FLUXER_CONTRACT_CHANNEL_ID");
   console.error("Optional env:");
-  console.error("- FLUXER_INTENTS (default: 513)");
-  console.error("- FLUXER_CONTRACT_LIST_LIMIT (default: 10)");
-  console.error("- FLUXER_CONTRACT_TIMEOUT_MS (default: 5000)");
-  console.error("- FLUXER_CONTRACT_MESSAGE_PREFIX (default: Fluxer.JS live contract probe)");
-  console.error("- FLUXER_KEEP_ALIVE=1 to keep the bot connected for a real !ping check after the contract probe");
-  console.error("- FLUXER_CONTRACT_REPORT_PATH to write a JSON contract run report");
+  console.error("- FLUXER_HOSTED_LIST_LIMIT or FLUXER_CONTRACT_LIST_LIMIT (default: 10)");
+  console.error("- FLUXER_HOSTED_TIMEOUT_MS or FLUXER_CONTRACT_TIMEOUT_MS (default: 5000)");
+  console.error("- FLUXER_HOSTED_MESSAGE_PREFIX or FLUXER_CONTRACT_MESSAGE_PREFIX");
+  console.error("- FLUXER_HOSTED_REPORT_PATH or FLUXER_CONTRACT_REPORT_PATH");
 }
 
-function printTroubleshootingHint(
-  error: PlatformBootstrapError | GatewayTransportError | RestTransportError | Error
-): void {
-  if (error instanceof PlatformBootstrapError || error instanceof GatewayTransportError || error instanceof RestTransportError) {
+function printTroubleshootingHint(error: DiscoveryError | RestTransportError | Error): void {
+  if (error instanceof DiscoveryError || error instanceof RestTransportError) {
     switch (error.code) {
-      case "PLATFORM_DISCOVERY_FAILED":
+      case "DISCOVERY_REQUEST_FAILED":
+      case "DISCOVERY_HTTP_ERROR":
+      case "DISCOVERY_RESPONSE_INVALID":
         console.error("Hint: verify FLUXER_INSTANCE_URL and confirm the discovery document is reachable from this machine.");
         return;
-      case "PLATFORM_GATEWAY_INFO_FAILED":
-        console.error("Hint: discovery worked, but gateway bootstrap failed. Check token validity, API reachability, and instance gateway support.");
-        return;
-      case "INSTANCE_CAPABILITY_UNSUPPORTED":
-        console.error("Hint: this instance does not advertise the capabilities required for the platform transport path. If you are targeting the official hosted Fluxer platform, use `npm run dev:hosted` instead.");
-        return;
       case "REST_HTTP_ERROR":
-        console.error("Hint: the outbound contract probe was rejected. Check channel access, bot permissions, and whether the channel ID is valid.");
+        console.error("Hint: the hosted confidence probe was rejected. Check channel access, token validity, and whether the channel ID is correct.");
         return;
       case "REST_REQUEST_FAILED":
-        console.error("Hint: the outbound contract probe failed before a response. Check network reachability, DNS, TLS, or reverse-proxy behavior.");
+        console.error("Hint: the hosted confidence request failed before a response. Check network reachability, DNS, TLS, or reverse-proxy behavior.");
         return;
       case "REST_RATE_LIMITED":
-        console.error("Hint: the instance rate-limited the contract probe. Wait and retry, or reduce repeated probe runs.");
+        console.error("Hint: the instance rate-limited the hosted confidence probe. Wait and retry, or reduce repeated probe runs.");
         return;
       case "REST_RESPONSE_INVALID":
-        console.error("Hint: the instance responded, but the response shape did not match the expected contract for the current read path.");
-        return;
-      case "GATEWAY_RECONNECT_EXHAUSTED":
-        console.error("Hint: the gateway connection could not recover. Check websocket reachability and whether the instance is closing bot sessions.");
+        console.error("Hint: the hosted platform responded, but the response shape did not match the expected read/write contract.");
         return;
       default:
         return;
@@ -192,17 +195,17 @@ function printTroubleshootingHint(
   }
 }
 
-function printTypedError(error: PlatformBootstrapError | GatewayTransportError | RestTransportError): void {
-  console.error(`[contract] ${error.code}`);
+function printTypedError(error: DiscoveryError | RestTransportError): void {
+  console.error(`[hosted] ${error.code}`);
   if (error.details) {
     console.error(error.details);
   }
 }
 
 function recordStep(
-  report: ContractRunReport,
+  report: HostedConfidenceReport,
   name: string,
-  status: ContractStepStatus,
+  status: ConfidenceStepStatus,
   details?: Record<string, unknown>
 ): void {
   report.steps.push({
@@ -216,17 +219,15 @@ function recordStep(
 function createRunReport(options: {
   instanceUrl?: string;
   channelId?: string;
-  keepAlive: boolean;
   listLimit: number;
   timeoutMs: number;
   reportPath?: string;
-}): ContractRunReport {
+}): HostedConfidenceReport {
   return {
     startedAt: new Date().toISOString(),
     status: "running",
     instanceUrl: options.instanceUrl,
     channelId: options.channelId,
-    keepAlive: options.keepAlive,
     listLimit: options.listLimit,
     timeoutMs: options.timeoutMs,
     reportPath: options.reportPath,
@@ -234,10 +235,8 @@ function createRunReport(options: {
   };
 }
 
-function createErrorRecord(
-  error: PlatformBootstrapError | GatewayTransportError | RestTransportError | Error
-): ContractRunReport["error"] {
-  if (error instanceof PlatformBootstrapError || error instanceof GatewayTransportError || error instanceof RestTransportError) {
+function createErrorRecord(error: DiscoveryError | RestTransportError | Error): HostedConfidenceReport["error"] {
+  if (error instanceof DiscoveryError || error instanceof RestTransportError) {
     return {
       name: error.name,
       message: error.message,
@@ -252,7 +251,7 @@ function createErrorRecord(
   };
 }
 
-async function writeReportIfConfigured(report: ContractRunReport): Promise<void> {
+async function writeReportIfConfigured(report: HostedConfidenceReport): Promise<void> {
   if (!report.reportPath) {
     return;
   }
@@ -260,7 +259,7 @@ async function writeReportIfConfigured(report: ContractRunReport): Promise<void>
   const outputPath = path.resolve(process.cwd(), report.reportPath);
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, JSON.stringify(report, null, 2) + "\n", "utf8");
-  console.log(`Contract report written to ${outputPath}`);
+  console.log(`Hosted confidence report written to ${outputPath}`);
 }
 
 async function waitForProbeEcho(options: {
@@ -291,7 +290,13 @@ async function waitForProbeEcho(options: {
     await sleep(500);
   }
 
-  throw new Error("Probe message was not observed in recent channel history before the contract timeout expired.");
+  throw new Error("Probe message was not observed in recent channel history before the hosted confidence timeout expired.");
+}
+
+function listEnabledCapabilities(capabilities: object): string[] {
+  return Object.entries(capabilities as Record<string, boolean>)
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name);
 }
 
 async function main(): Promise<void> {
@@ -299,16 +304,22 @@ async function main(): Promise<void> {
   const instanceUrl = requireEnv("FLUXER_INSTANCE_URL");
   const token = requireEnv("FLUXER_TOKEN");
   const channelId = requireEnv("FLUXER_CONTRACT_CHANNEL_ID");
-  const intents = parseIntEnv("FLUXER_INTENTS", 513);
-  const listLimit = parseIntEnv("FLUXER_CONTRACT_LIST_LIMIT", 10);
-  const timeoutMs = parseIntEnv("FLUXER_CONTRACT_TIMEOUT_MS", 5000);
-  const keepAlive = process.env.FLUXER_KEEP_ALIVE === "1";
-  const probePrefix = optionalEnv("FLUXER_CONTRACT_MESSAGE_PREFIX") ?? "Fluxer.JS live contract probe";
-  const reportPath = optionalEnv("FLUXER_CONTRACT_REPORT_PATH");
+  const listLimit = parsePositiveInt(
+    optionalEnvFromNames(["FLUXER_HOSTED_LIST_LIMIT", "FLUXER_CONTRACT_LIST_LIMIT"]),
+    10,
+    "FLUXER_HOSTED_LIST_LIMIT"
+  );
+  const timeoutMs = parsePositiveInt(
+    optionalEnvFromNames(["FLUXER_HOSTED_TIMEOUT_MS", "FLUXER_CONTRACT_TIMEOUT_MS"]),
+    5000,
+    "FLUXER_HOSTED_TIMEOUT_MS"
+  );
+  const probePrefix = optionalEnvFromNames(["FLUXER_HOSTED_MESSAGE_PREFIX", "FLUXER_CONTRACT_MESSAGE_PREFIX"])
+    ?? "Fluxer.JS hosted confidence probe";
+  const reportPath = optionalEnvFromNames(["FLUXER_HOSTED_REPORT_PATH", "FLUXER_CONTRACT_REPORT_PATH"]);
   const report = createRunReport({
     instanceUrl,
     channelId,
-    keepAlive,
     listLimit,
     timeoutMs,
     reportPath
@@ -319,57 +330,49 @@ async function main(): Promise<void> {
     console.log(`Loaded env files: ${loadedEnvFiles.join(", ")}`);
   }
 
-  const transport = await createFluxerPlatformTransport({
+  recordStep(report, "discover_instance", "started", {
+    instanceUrl
+  });
+  const discovery = await fetchInstanceDiscoveryDocument({
+    instanceUrl
+  });
+  const instanceInfo = createInstanceInfo({
     instanceUrl,
-    auth: { token },
-    intents,
-    debug: (event) => {
-      if (
-        event.event === "instance_detected"
-        || event.event === "platform_transport_bootstrapped"
-        || event.event === "gateway_state_changed"
-      ) {
-        console.log(`[debug] ${event.event}`, event.data ?? {});
-      }
-    }
+    discovery
+  });
+  report.instance = {
+    apiBaseUrl: instanceInfo.apiBaseUrl,
+    isSelfHosted: instanceInfo.isSelfHosted,
+    capabilities: listEnabledCapabilities(instanceInfo.capabilities)
+  };
+  recordStep(report, "discover_instance", "passed", {
+    apiBaseUrl: instanceInfo.apiBaseUrl,
+    isSelfHosted: instanceInfo.isSelfHosted,
+    capabilities: report.instance.capabilities
+  });
+  console.log("[debug] instance_detected", {
+    instanceUrl: instanceInfo.instanceUrl,
+    apiBaseUrl: instanceInfo.apiBaseUrl,
+    apiCodeVersion: instanceInfo.apiCodeVersion,
+    isSelfHosted: instanceInfo.isSelfHosted,
+    capabilities: report.instance.capabilities
   });
 
+  if (instanceInfo.capabilities.gatewayBot) {
+    console.log("This instance advertises gatewayBot. For the stronger bot-runtime path, prefer `npm run dev:contract`.");
+  } else {
+    console.log("This instance does not advertise gatewayBot. Running the hosted REST confidence path.");
+  }
+
+  const transport = new RestTransport({
+    discovery,
+    auth: { token }
+  });
   const client = new FluxerClient(transport);
-  const bot = new FluxerBot({
-    name: "LiveContractBot",
-    prefix: "!"
-  });
 
-  bot.command({
-    name: "ping",
-    description: "Reply with pong.",
-    execute: async ({ reply }) => {
-      await reply("pong");
-    }
-  });
-
-  client.on("ready", ({ connectedAt }) => {
-    console.log(`Connected at ${connectedAt.toISOString()}`);
-  });
-
-  client.on("gatewayStateChange", ({ state }) => {
-    console.log(`Gateway state: ${state}`);
-  });
-
-  client.on("error", (error) => {
-    if (error instanceof GatewayTransportError || error instanceof RestTransportError) {
-      printTypedError(error);
-      printTroubleshootingHint(error);
-      return;
-    }
-
-    console.error(error);
-  });
-
-  client.registerBot(bot);
-  recordStep(report, "connect", "started");
+  recordStep(report, "connect_rest_transport", "started");
   await client.connect();
-  recordStep(report, "connect", "passed");
+  recordStep(report, "connect_rest_transport", "passed");
 
   recordStep(report, "fetch_current_user", "started");
   const currentUser = await client.fetchCurrentUser();
@@ -392,7 +395,7 @@ async function main(): Promise<void> {
     channelName: channel.name,
     channelType: channel.type
   });
-  console.log(`Contract channel: ${channel.name} (${channel.id})`);
+  console.log(`Hosted confidence channel: ${channel.name} (${channel.id})`);
 
   recordStep(report, "indicate_typing", "started", {
     channelId
@@ -407,7 +410,7 @@ async function main(): Promise<void> {
   report.probe = {
     content: probeContent
   };
-  console.log(`Sending contract probe: ${probeContent}`);
+  console.log(`Sending hosted confidence probe: ${probeContent}`);
   recordStep(report, "send_probe", "started", {
     channelId,
     probeContent
@@ -436,27 +439,17 @@ async function main(): Promise<void> {
     confirmedMessageId
   });
 
-  console.log("Live contract harness passed.");
-  report.status = "passed";
-  report.finishedAt = new Date().toISOString();
-
-  if (keepAlive) {
-    recordStep(report, "keep_alive", "passed");
-    await writeReportIfConfigured(report);
-    console.log("The bot is staying connected.");
-    console.log("Next step: send `!ping` in the contract channel and verify that the bot replies with `pong`.");
-    return;
-  }
-
-  console.log("Disconnecting after the contract probe.");
   recordStep(report, "disconnect", "started");
   await client.disconnect();
   recordStep(report, "disconnect", "passed");
+  report.status = "passed";
+  report.finishedAt = new Date().toISOString();
   await writeReportIfConfigured(report);
+  console.log("Hosted confidence path passed.");
 }
 
 main().catch(async (error) => {
-  if (error instanceof PlatformBootstrapError || error instanceof GatewayTransportError || error instanceof RestTransportError) {
+  if (error instanceof DiscoveryError || error instanceof RestTransportError) {
     if (currentReport) {
       currentReport.status = "failed";
       currentReport.finishedAt = new Date().toISOString();
@@ -489,6 +482,6 @@ main().catch(async (error) => {
     return;
   }
 
-  console.error("Unknown live-instance contract failure.");
+  console.error("Unknown hosted confidence failure.");
   process.exitCode = 1;
 });
