@@ -1232,6 +1232,100 @@ test("drops non-message gateway events with malformed timestamps and emits warni
   );
 });
 
+test("drops guild member gateway events with invalid member field types and emits warnings", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const debugEvents: Array<{ event: string; level?: string; data?: Record<string, unknown> }> = [];
+  const domainEvents: string[] = [];
+
+  client.on("debug", (event) => {
+    debugEvents.push({
+      event: event.event,
+      level: event.level,
+      data: event.data as Record<string, unknown> | undefined
+    });
+  });
+
+  client.on("guildMemberAdd", () => {
+    domainEvents.push("guildMemberAdd");
+  });
+
+  client.on("guildMemberUpdate", () => {
+    domainEvents.push("guildMemberUpdate");
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "GUILD_MEMBER_ADD",
+    sequence: 15,
+    data: {
+      guild_id: "guild_1",
+      nick: 42,
+      roles: ["role_1"],
+      user: {
+        id: "user_1",
+        username: "fluxguy"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        guild_id: "guild_1",
+        nick: 42,
+        roles: ["role_1"],
+        user: {
+          id: "user_1",
+          username: "fluxguy"
+        }
+      },
+      s: 15,
+      t: "GUILD_MEMBER_ADD"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "GUILD_MEMBER_UPDATE",
+    sequence: 16,
+    data: {
+      guild_id: "guild_1",
+      nick: "Flux Guy",
+      roles: ["role_1", 7],
+      user: {
+        id: "user_1",
+        username: "fluxguy"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        guild_id: "guild_1",
+        nick: "Flux Guy",
+        roles: ["role_1", 7],
+        user: {
+          id: "user_1",
+          username: "fluxguy"
+        }
+      },
+      s: 16,
+      t: "GUILD_MEMBER_UPDATE"
+    }
+  });
+
+  assert.deepEqual(domainEvents, []);
+
+  const ignoredEvents = debugEvents.filter((event) => event.event === "gateway_dispatch_ignored");
+  assert.deepEqual(
+    ignoredEvents.map((event) => ({
+      level: event.level,
+      type: event.data?.type,
+      reason: event.data?.reason
+    })),
+    [
+      { level: "warn", type: "GUILD_MEMBER_ADD", reason: "invalid_guild_member_payload" },
+      { level: "warn", type: "GUILD_MEMBER_UPDATE", reason: "invalid_guild_member_payload" }
+    ]
+  );
+});
+
 test("maps role, reaction, and voice gateway events", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);

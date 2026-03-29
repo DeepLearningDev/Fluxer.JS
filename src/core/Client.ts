@@ -1177,23 +1177,25 @@ export class FluxerClient extends EventEmitter {
   #parseGatewayGuildMember(event: FluxerGatewayDispatchEvent): FluxerGuildMember | null {
     const payload = event.data as {
       guild_id?: string;
-      nick?: string;
-      roles?: string[];
+      nick?: unknown;
+      roles?: unknown;
       joined_at?: string;
       user?: { id?: string; username?: string; global_name?: string; bot?: boolean };
     };
 
     const user = this.#parseGatewayUser(payload.user);
+    const nickname = this.#parseOptionalString(payload.nick);
+    const roles = this.#parseOptionalStringArray(payload.roles);
     const joinedAt = this.#parseOptionalIsoDate(payload.joined_at);
-    if (!payload.guild_id || !user || joinedAt === null) {
+    if (!payload.guild_id || !user || nickname === null || roles === null || joinedAt === null) {
       return null;
     }
 
     return {
       user,
       guildId: payload.guild_id,
-      nickname: payload.nick,
-      roles: payload.roles,
+      nickname,
+      roles,
       joinedAt
     };
   }
@@ -1416,6 +1418,26 @@ export class FluxerClient extends EventEmitter {
 
     const parsed = new Date(value * 1000);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  #parseOptionalString(value: unknown): string | undefined | null {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    return typeof value === "string" ? value : null;
+  }
+
+  #parseOptionalStringArray(value: unknown): string[] | undefined | null {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+      return null;
+    }
+
+    return [...value];
   }
 
   #parseGatewayUser(payload: unknown): FluxerUser | null {
