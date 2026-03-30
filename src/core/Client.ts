@@ -1250,21 +1250,32 @@ export class FluxerClient extends EventEmitter {
 
   #parseTypingStart(event: FluxerGatewayDispatchEvent): FluxerTypingStartEvent | null {
     const payload = event.data as {
-      channel_id?: string;
-      user_id?: string;
-      guild_id?: string;
-      timestamp?: number;
+      channel_id?: unknown;
+      user_id?: unknown;
+      guild_id?: unknown;
+      timestamp?: unknown;
     };
 
-    const startedAt = this.#parseOptionalUnixDate(payload.timestamp);
-    if (!payload.channel_id || !payload.user_id || startedAt === null) {
+    const guildId = this.#parseOptionalString(payload.guild_id);
+    const timestamp = payload.timestamp;
+    if (timestamp !== undefined && typeof timestamp !== "number") {
+      return null;
+    }
+
+    const startedAt = this.#parseOptionalUnixDate(timestamp);
+    if (
+      typeof payload.channel_id !== "string"
+      || typeof payload.user_id !== "string"
+      || guildId === null
+      || startedAt === null
+    ) {
       return null;
     }
 
     return {
       channelId: payload.channel_id,
       userId: payload.user_id,
-      guildId: payload.guild_id,
+      guildId,
       startedAt
     };
   }
@@ -1333,19 +1344,20 @@ export class FluxerClient extends EventEmitter {
 
   #parseChannelPinsUpdate(event: FluxerGatewayDispatchEvent): FluxerChannelPinsUpdateEvent | null {
     const payload = event.data as {
-      channel_id?: string;
-      guild_id?: string;
+      channel_id?: unknown;
+      guild_id?: unknown;
       last_pin_timestamp?: string | null;
     };
 
+    const guildId = this.#parseOptionalString(payload.guild_id);
     const lastPinTimestamp = this.#parseOptionalIsoDate(payload.last_pin_timestamp);
-    if (!payload.channel_id || lastPinTimestamp === null) {
+    if (typeof payload.channel_id !== "string" || guildId === null || lastPinTimestamp === null) {
       return null;
     }
 
     return {
       channelId: payload.channel_id,
-      guildId: payload.guild_id,
+      guildId,
       lastPinTimestamp
     };
   }

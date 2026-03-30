@@ -1476,6 +1476,86 @@ test("drops channel and guild gateway events with invalid field types and emits 
   );
 });
 
+test("drops typing and channel pins gateway events with invalid id field types and emits warnings", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const debugEvents: Array<{ event: string; level?: string; data?: Record<string, unknown> }> = [];
+  const domainEvents: string[] = [];
+
+  client.on("debug", (event) => {
+    debugEvents.push({
+      event: event.event,
+      level: event.level,
+      data: event.data as Record<string, unknown> | undefined
+    });
+  });
+
+  client.on("typingStart", () => {
+    domainEvents.push("typingStart");
+  });
+
+  client.on("channelPinsUpdate", () => {
+    domainEvents.push("channelPinsUpdate");
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "TYPING_START",
+    sequence: 19,
+    data: {
+      channel_id: "general",
+      user_id: "user_1",
+      guild_id: 42,
+      timestamp: 1_763_086_800
+    },
+    raw: {
+      op: 0,
+      d: {
+        channel_id: "general",
+        user_id: "user_1",
+        guild_id: 42,
+        timestamp: 1_763_086_800
+      },
+      s: 19,
+      t: "TYPING_START"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "CHANNEL_PINS_UPDATE",
+    sequence: 20,
+    data: {
+      channel_id: "general",
+      guild_id: false,
+      last_pin_timestamp: "2026-03-18T22:00:00.000Z"
+    },
+    raw: {
+      op: 0,
+      d: {
+        channel_id: "general",
+        guild_id: false,
+        last_pin_timestamp: "2026-03-18T22:00:00.000Z"
+      },
+      s: 20,
+      t: "CHANNEL_PINS_UPDATE"
+    }
+  });
+
+  assert.deepEqual(domainEvents, []);
+
+  const ignoredEvents = debugEvents.filter((event) => event.event === "gateway_dispatch_ignored");
+  assert.deepEqual(
+    ignoredEvents.map((event) => ({
+      level: event.level,
+      type: event.data?.type,
+      reason: event.data?.reason
+    })),
+    [
+      { level: "warn", type: "TYPING_START", reason: "invalid_typing_payload" },
+      { level: "warn", type: "CHANNEL_PINS_UPDATE", reason: "invalid_channel_pins_payload" }
+    ]
+  );
+});
+
 test("drops guild role gateway events with invalid role field types and emits warnings", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
