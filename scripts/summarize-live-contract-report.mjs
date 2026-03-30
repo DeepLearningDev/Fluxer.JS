@@ -58,6 +58,14 @@ function renderSummary(report, inputPath) {
     lines.push("");
   }
 
+  if (report.runtime) {
+    lines.push("## Runtime", "");
+    lines.push(`- Node: ${String(report.runtime.nodeVersion ?? "unknown")}`);
+    lines.push(`- Platform: ${String(report.runtime.platform ?? "unknown")}`);
+    lines.push(`- WebSocket available: ${report.runtime.hasWebSocket === true ? "yes" : "no"}`);
+    lines.push("");
+  }
+
   if (report.currentUser) {
     lines.push("## Current User", "");
     lines.push(`- Username: ${String(report.currentUser.username ?? "unknown")}`);
@@ -146,6 +154,11 @@ function renderSummary(report, inputPath) {
     if (report.error.code) {
       lines.push(`- Code: ${String(report.error.code)}`);
     }
+    if (report.error.details && typeof report.error.details === "object") {
+      for (const [key, value] of Object.entries(report.error.details)) {
+        lines.push(`- Detail ${key}: ${formatDetailValue(value)}`);
+      }
+    }
     lines.push("");
   }
 
@@ -156,4 +169,12 @@ function summaryLabel(mode) {
   return mode === "hosted-confidence"
     ? "Hosted confidence summary"
     : "Contract summary";
+}
+
+function formatDetailValue(value) {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return `\`${JSON.stringify(value)}\``;
 }

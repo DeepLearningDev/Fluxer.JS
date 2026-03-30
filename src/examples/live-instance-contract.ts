@@ -37,6 +37,18 @@ interface ContractRunReport {
   listLimit: number;
   timeoutMs: number;
   reportPath?: string;
+  runtime: {
+    nodeVersion: string;
+    platform: string;
+    hasWebSocket: boolean;
+  };
+  instance?: {
+    apiBaseUrl?: string;
+    gatewayUrl?: string;
+    apiCodeVersion?: number;
+    isSelfHosted?: boolean;
+    capabilities: string[];
+  };
   currentUser?: {
     id: string;
     username: string;
@@ -107,6 +119,11 @@ function printTroubleshootingHint(
 
   if (error.message.includes("Probe message was not observed")) {
     console.error("Hint: the send path may have succeeded but channel reads did not surface the new message in time. Check channel read permissions and listMessages behavior on this instance.");
+    return;
+  }
+
+  if (error.message.includes("requires a runtime with a global WebSocket implementation")) {
+    console.error("Hint: run this harness from Node 20+ or another runtime that provides a global WebSocket implementation.");
   }
 }
 
@@ -149,6 +166,11 @@ function createRunReport(options: {
     listLimit: options.listLimit,
     timeoutMs: options.timeoutMs,
     reportPath: options.reportPath,
+    runtime: {
+      nodeVersion: process.version,
+      platform: process.platform,
+      hasWebSocket: typeof globalThis.WebSocket === "function"
+    },
     steps: []
   };
 }
@@ -225,7 +247,6 @@ async function main(): Promise<void> {
   const keepAlive = process.env.FLUXER_KEEP_ALIVE === "1";
   const probePrefix = optionalEnv("FLUXER_CONTRACT_MESSAGE_PREFIX") ?? "Fluxer.JS live contract probe";
   const reportPath = optionalEnv("FLUXER_CONTRACT_REPORT_PATH");
-  requireWebSocketRuntime("Live contract harness");
   const report = createRunReport({
     instanceUrl,
     channelId,
@@ -235,6 +256,13 @@ async function main(): Promise<void> {
     reportPath
   });
   currentReport = report;
+  recordStep(report, "runtime_preflight", "started", {
+    nodeVersion: report.runtime.nodeVersion,
+    platform: report.runtime.platform,
+    hasWebSocket: report.runtime.hasWebSocket
+  });
+  requireWebSocketRuntime("Live contract harness");
+  recordStep(report, "runtime_preflight", "passed");
 
   if (loadedEnvFiles.length > 0) {
     console.log(`Loaded env files: ${loadedEnvFiles.join(", ")}`);
@@ -252,6 +280,17 @@ async function main(): Promise<void> {
       ) {
         console.log(`[debug] ${event.event}`, event.data ?? {});
       }
+    },
+    onInstanceInfo: (instanceInfo) => {
+      report.instance = {
+        apiBaseUrl: instanceInfo.apiBaseUrl,
+        gatewayUrl: instanceInfo.gatewayBaseUrl,
+        apiCodeVersion: instanceInfo.apiCodeVersion,
+        isSelfHosted: instanceInfo.isSelfHosted,
+        capabilities: Object.entries(instanceInfo.capabilities)
+          .filter(([, enabled]) => enabled)
+          .map(([name]) => name)
+      };
     }
   });
 
