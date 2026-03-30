@@ -1576,6 +1576,100 @@ test("drops voice gateway events with invalid field types and emits warnings", a
   );
 });
 
+test("drops reaction gateway events with invalid optional field types and emits warnings", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const debugEvents: Array<{ event: string; level?: string; data?: Record<string, unknown> }> = [];
+  const domainEvents: string[] = [];
+
+  client.on("debug", (event) => {
+    debugEvents.push({
+      event: event.event,
+      level: event.level,
+      data: event.data as Record<string, unknown> | undefined
+    });
+  });
+
+  client.on("messageReactionAdd", () => {
+    domainEvents.push("messageReactionAdd");
+  });
+
+  client.on("messageReactionRemove", () => {
+    domainEvents.push("messageReactionRemove");
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "MESSAGE_REACTION_ADD",
+    sequence: 23,
+    data: {
+      user_id: "user_1",
+      channel_id: "general",
+      message_id: "msg_1",
+      guild_id: 42,
+      emoji: {
+        name: "wave"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        user_id: "user_1",
+        channel_id: "general",
+        message_id: "msg_1",
+        guild_id: 42,
+        emoji: {
+          name: "wave"
+        }
+      },
+      s: 23,
+      t: "MESSAGE_REACTION_ADD"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "MESSAGE_REACTION_REMOVE",
+    sequence: 24,
+    data: {
+      user_id: "user_1",
+      channel_id: "general",
+      message_id: "msg_1",
+      emoji: {
+        id: "emoji_1",
+        animated: "yes"
+      }
+    },
+    raw: {
+      op: 0,
+      d: {
+        user_id: "user_1",
+        channel_id: "general",
+        message_id: "msg_1",
+        emoji: {
+          id: "emoji_1",
+          animated: "yes"
+        }
+      },
+      s: 24,
+      t: "MESSAGE_REACTION_REMOVE"
+    }
+  });
+
+  assert.deepEqual(domainEvents, []);
+
+  const ignoredEvents = debugEvents.filter((event) => event.event === "gateway_dispatch_ignored");
+  assert.deepEqual(
+    ignoredEvents.map((event) => ({
+      level: event.level,
+      type: event.data?.type,
+      reason: event.data?.reason
+    })),
+    [
+      { level: "warn", type: "MESSAGE_REACTION_ADD", reason: "invalid_reaction_payload" },
+      { level: "warn", type: "MESSAGE_REACTION_REMOVE", reason: "invalid_reaction_payload" }
+    ]
+  );
+});
+
 test("maps role, reaction, and voice gateway events", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);

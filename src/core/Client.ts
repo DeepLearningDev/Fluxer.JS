@@ -1256,14 +1256,27 @@ export class FluxerClient extends EventEmitter {
 
   #parseGatewayReaction(event: FluxerGatewayDispatchEvent): FluxerReactionEvent | null {
     const payload = event.data as {
-      user_id?: string;
-      channel_id?: string;
-      message_id?: string;
-      guild_id?: string;
-      emoji?: { id?: string; name?: string; animated?: boolean };
+      user_id?: unknown;
+      channel_id?: unknown;
+      message_id?: unknown;
+      guild_id?: unknown;
+      emoji?: { id?: unknown; name?: unknown; animated?: unknown };
     };
 
-    if (!payload.user_id || !payload.channel_id || !payload.message_id || !payload.emoji) {
+    const guildId = this.#parseOptionalString(payload.guild_id);
+    const emojiId = this.#parseOptionalString(payload.emoji?.id);
+    const emojiName = this.#parseOptionalString(payload.emoji?.name);
+    const animated = this.#parseOptionalBoolean(payload.emoji?.animated);
+    if (
+      typeof payload.user_id !== "string"
+      || typeof payload.channel_id !== "string"
+      || typeof payload.message_id !== "string"
+      || !payload.emoji
+      || guildId === null
+      || emojiId === null
+      || emojiName === null
+      || animated === null
+    ) {
       return null;
     }
 
@@ -1271,11 +1284,11 @@ export class FluxerClient extends EventEmitter {
       userId: payload.user_id,
       channelId: payload.channel_id,
       messageId: payload.message_id,
-      guildId: payload.guild_id,
+      guildId,
       emoji: {
-        id: payload.emoji.id,
-        name: payload.emoji.name,
-        animated: payload.emoji.animated
+        id: emojiId,
+        name: emojiName,
+        animated
       }
     };
   }
