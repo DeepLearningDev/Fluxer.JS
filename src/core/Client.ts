@@ -1111,14 +1111,19 @@ export class FluxerClient extends EventEmitter {
   }
 
   #parseGatewayChannel(event: FluxerGatewayDispatchEvent): FluxerChannel | null {
-    const payload = event.data as { id?: string; name?: string | null; type?: number | string };
-    if (!payload.id || payload.type === undefined) {
+    const payload = event.data as { id?: unknown; name?: unknown; type?: unknown };
+    const name = this.#parseOptionalString(payload.name);
+    if (
+      typeof payload.id !== "string"
+      || (typeof payload.type !== "number" && typeof payload.type !== "string")
+      || name === null
+    ) {
       return null;
     }
 
     return {
       id: payload.id,
-      name: payload.name ?? payload.id,
+      name: name ?? payload.id,
       type: this.#normalizeChannelType(payload.type)
     };
   }
@@ -1136,15 +1141,16 @@ export class FluxerClient extends EventEmitter {
   }
 
   #parseGatewayGuild(event: FluxerGatewayDispatchEvent): FluxerGuild | null {
-    const payload = event.data as { id?: string; name?: string; icon?: string };
-    if (!payload.id || !payload.name) {
+    const payload = event.data as { id?: unknown; name?: unknown; icon?: unknown };
+    const iconUrl = this.#parseOptionalString(payload.icon);
+    if (typeof payload.id !== "string" || typeof payload.name !== "string" || iconUrl === null) {
       return null;
     }
 
     return {
       id: payload.id,
       name: payload.name,
-      iconUrl: payload.icon
+      iconUrl
     };
   }
 

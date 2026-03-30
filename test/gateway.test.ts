@@ -1398,6 +1398,84 @@ test("drops presence gateway events with invalid field types and emits warnings"
   );
 });
 
+test("drops channel and guild gateway events with invalid field types and emits warnings", async () => {
+  const transport = new MockTransport();
+  const client = new FluxerClient(transport);
+  const debugEvents: Array<{ event: string; level?: string; data?: Record<string, unknown> }> = [];
+  const domainEvents: string[] = [];
+
+  client.on("debug", (event) => {
+    debugEvents.push({
+      event: event.event,
+      level: event.level,
+      data: event.data as Record<string, unknown> | undefined
+    });
+  });
+
+  client.on("channelCreate", () => {
+    domainEvents.push("channelCreate");
+  });
+
+  client.on("guildUpdate", () => {
+    domainEvents.push("guildUpdate");
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "CHANNEL_CREATE",
+    sequence: 17,
+    data: {
+      id: "channel_1",
+      name: 42,
+      type: 0
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "channel_1",
+        name: 42,
+        type: 0
+      },
+      s: 17,
+      t: "CHANNEL_CREATE"
+    }
+  });
+
+  await client.receiveGatewayDispatch({
+    type: "GUILD_UPDATE",
+    sequence: 18,
+    data: {
+      id: "guild_1",
+      name: "Fluxer HQ",
+      icon: 7
+    },
+    raw: {
+      op: 0,
+      d: {
+        id: "guild_1",
+        name: "Fluxer HQ",
+        icon: 7
+      },
+      s: 18,
+      t: "GUILD_UPDATE"
+    }
+  });
+
+  assert.deepEqual(domainEvents, []);
+
+  const ignoredEvents = debugEvents.filter((event) => event.event === "gateway_dispatch_ignored");
+  assert.deepEqual(
+    ignoredEvents.map((event) => ({
+      level: event.level,
+      type: event.data?.type,
+      reason: event.data?.reason
+    })),
+    [
+      { level: "warn", type: "CHANNEL_CREATE", reason: "invalid_channel_payload" },
+      { level: "warn", type: "GUILD_UPDATE", reason: "invalid_guild_payload" }
+    ]
+  );
+});
+
 test("drops guild role gateway events with invalid role field types and emits warnings", async () => {
   const transport = new MockTransport();
   const client = new FluxerClient(transport);
